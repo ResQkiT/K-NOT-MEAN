@@ -1,3 +1,10 @@
 package ru.mephi.k_not_mean.core
 
-data class Point2D(val x: Float, val y: Float, val clusterId: Int = 0)
+class Point2D(
+    x: Double,
+    y: Double,
+    clusterId: Int = -1
+) : Point(doubleArrayOf(x, y), clusterId) {
+    val x: Float get() = coordinates[0].toFloat()
+    val y: Float get() = coordinates[1].toFloat()
+}

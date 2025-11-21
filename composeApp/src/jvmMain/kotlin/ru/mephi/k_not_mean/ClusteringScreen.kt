@@ -9,17 +9,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import ru.mephi.k_not_mean.core.Point
 import ru.mephi.k_not_mean.core.Point2D
 import ru.mephi.k_not_mean.core.TaskDimension
-import kotlin.random.Random
-
+import ru.mephi.k_not_mean.windows.Platform
 
 @Composable
 fun ClusteringScreen(
-    fileLoader: () -> List<Point2D>?
+
 ) {
     var selectedDimension by remember { mutableStateOf(TaskDimension.DIMENSION_2D) }
-    var dimensionCount by remember { mutableStateOf("4") } // Поле для ввода N-мерности
+    var dimensionCount by remember { mutableStateOf("4") }
     var points by remember { mutableStateOf<List<Point2D>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf("Готов к работе") }
@@ -29,10 +29,10 @@ fun ClusteringScreen(
         statusMessage = "Выбор файла..."
 
         try {
-            val loadedPoints = fileLoader() // Вызываем реальный диалог
+            val loadedPoints = Platform.openFileDialogAndParse()
             if (loadedPoints != null) {
-                points = loadedPoints
-                statusMessage = "Загружено ${points.size} точек"
+                points = loadedPoints.filterIsInstance<Point2D>()
+                statusMessage = "Загружено ${loadedPoints.size} строк. Визуализируется ${points.size} точек (2D)."
             } else {
                 statusMessage = "Загрузка отменена"
             }
@@ -43,15 +43,14 @@ fun ClusteringScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().padding(12.dp)) { // Меньше отступы
+    Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
         Text(
             text = "Кластеризация Данных",
-            style = MaterialTheme.typography.titleMedium // Шрифт меньше
+            style = MaterialTheme.typography.titleMedium
         )
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Панель управления
         ControlPanel(
             selectedDimension = selectedDimension,
             dimensionCount = dimensionCount,
@@ -70,7 +69,6 @@ fun ClusteringScreen(
 
         Divider(modifier = Modifier.padding(vertical = 8.dp))
 
-        // Область визуализации
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -108,7 +106,6 @@ fun ControlPanel(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // 1. Выпадающий список
         ExposedDropdownMenuBox(
             expanded = expanded,
             onExpandedChange = { expanded = !expanded },
@@ -139,7 +136,6 @@ fun ControlPanel(
             }
         }
 
-        // 2. Поле ввода мерности (Появляется только если выбрано "Многомерная")
         if (selectedDimension == TaskDimension.MULTI_DIM) {
             OutlinedTextField(
                 value = dimensionCount,
@@ -151,11 +147,11 @@ fun ControlPanel(
             )
         }
 
-        // 3. Кнопка загрузки
+
         Button(
             onClick = onLoadClick,
             enabled = !isLoading,
-            modifier = Modifier.height(50.dp), // Компактная высота
+            modifier = Modifier.height(50.dp),
             shape = MaterialTheme.shapes.small
         ) {
             if (isLoading) {
@@ -169,7 +165,7 @@ fun ControlPanel(
 
 @Composable
 fun ClusterVisualizer(points: List<Point2D>) {
-    val colors = listOf(Color.Red, Color.Blue, Color(0xFF008000), Color.Magenta, Color.Cyan) // Темно-зеленый для читаемости
+    val colors = listOf(Color.Red, Color.Blue, Color(0xFF008000), Color.Magenta, Color.Cyan)
 
     Canvas(modifier = Modifier.fillMaxSize().padding(8.dp)) {
         val w = size.width
@@ -178,8 +174,8 @@ fun ClusterVisualizer(points: List<Point2D>) {
         points.forEach { point ->
             drawCircle(
                 color = colors[point.clusterId % colors.size],
-                center = Offset(point.x * w, point.y * h), // Предполагаем нормализацию 0..1
-                radius = 3.dp.toPx() // Точки меньше
+                center = Offset(point.x * w, point.y * h),
+                radius = 3.dp.toPx()
             )
         }
     }

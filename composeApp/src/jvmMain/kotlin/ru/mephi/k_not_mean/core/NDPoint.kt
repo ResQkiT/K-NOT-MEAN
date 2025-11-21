@@ -1,0 +1,8 @@
+package ru.mephi.k_not_mean.core
+
+class NDPoint(
+    coordinates: DoubleArray,
+    clusterId: Int = -1
+) : Point(coordinates, clusterId) {
+    constructor(vararg values: Double) : this(values, -1)
+}
