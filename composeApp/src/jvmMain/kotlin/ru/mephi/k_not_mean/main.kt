@@ -6,6 +6,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 
 fun main() = application {
+    println("Hello from ass")
     Window(
         onCloseRequest = ::exitApplication,
         title = "Cluster App",
