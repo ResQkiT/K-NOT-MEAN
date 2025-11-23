@@ -13,6 +13,7 @@ abstract class Point(
 ) {
 
     val dimension: Int get() = coordinates.size
+    abstract fun copy(): Point
 
     /**
      * 1. Евклидово расстояние между двумя точками.
