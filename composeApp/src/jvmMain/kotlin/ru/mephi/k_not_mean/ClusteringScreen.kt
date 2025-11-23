@@ -9,7 +9,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import ru.mephi.k_not_mean.core.Point
 import ru.mephi.k_not_mean.core.Point2D
 import ru.mephi.k_not_mean.core.TaskDimension
 import ru.mephi.k_not_mean.windows.Platform
@@ -173,7 +172,7 @@ fun ClusterVisualizer(points: List<Point2D>) {
 
         points.forEach { point ->
             drawCircle(
-                color = colors[point.clusterId % colors.size],
+                color = if(point.clusterId != -1) colors[point.clusterId % colors.size] else Color.Black,
                 center = Offset(point.x * w, point.y * h),
                 radius = 3.dp.toPx()
             )
