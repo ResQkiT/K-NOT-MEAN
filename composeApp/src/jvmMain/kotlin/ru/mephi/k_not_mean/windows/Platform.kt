@@ -13,7 +13,6 @@ class Platform {
         lateinit var delimiter : String
         private val CLUSTER_NAMES_SET = setOf("cluster", "label", "id", "class")
 
-        // 💡 ГЛАВНОЕ ИЗМЕНЕНИЕ: Нормализация вызывается сразу после парсинга.
         fun openFileDialogAndParse(): List<Point>? {
             val dialog = FileDialog(null as Frame?, "Выберите CSV файл", FileDialog.LOAD)
             dialog.file = "*.csv;*.txt"
@@ -44,7 +43,6 @@ class Platform {
 
             val dimension = points.first().dimension
 
-            // 1. Находим глобальные Min/Max для каждой размерности
             val minCoords = DoubleArray(dimension) { i ->
                 points.minOf { it.coordinates[i] }
             }
@@ -52,21 +50,17 @@ class Platform {
                 points.maxOf { it.coordinates[i] }
             }
 
-            // 2. Создаем новый список нормализованных точек
             val normalizedPoints = points.map { oldPoint ->
                 val newCoords = DoubleArray(dimension) { i ->
                     val range = maxCoords[i] - minCoords[i]
 
                     if (range == 0.0) {
-                        // Если все значения одинаковые, ставим в центр 0.5
                         0.5
                     } else {
-                        // Формула: (x - X_min) / (X_max - X_min)
                         (oldPoint.coordinates[i] - minCoords[i]) / range
                     }
                 }
 
-                // 3. Создаем новый объект Point (2D или ND)
                 when (dimension) {
                     2 -> Point2D(newCoords[0], newCoords[1], oldPoint.clusterId)
                     else -> NDPoint(newCoords, oldPoint.clusterId)

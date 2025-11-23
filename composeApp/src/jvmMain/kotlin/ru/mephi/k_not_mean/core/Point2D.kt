@@ -5,6 +5,14 @@ class Point2D(
     y: Double,
     clusterId: Int = -1
 ) : Point(doubleArrayOf(x, y), clusterId) {
-    val x: Float get() = coordinates[0].toFloat()
-    val y: Float get() = coordinates[1].toFloat()
+    val x: Double get() = coordinates[0]
+    val y: Double get() = coordinates[1]
+
+    override fun copy(): Point {
+        return Point2D(
+            x = this.x,
+            y = this.y,
+            clusterId = clusterId
+        )
+    }
 }
