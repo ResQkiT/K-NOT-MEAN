@@ -143,10 +143,6 @@ fun ClusteringScreen() {
     }
 }
 
-// -----------------------------------------------------------
-// КОМПОНЕНТ ПАНЕЛИ УПРАВЛЕНИЯ
-// -----------------------------------------------------------
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ControlPanel(
@@ -245,17 +241,10 @@ fun ControlPanel(
     }
 }
 
-// -----------------------------------------------------------
-// КОМПОНЕНТ ВИЗУАЛИЗАЦИИ
-// -----------------------------------------------------------
-
 @Composable
 fun ClusterVisualizer(points: List<Point>) {
-    val colors = remember {
-        listOf(
-            Color.Red, Color.Blue, Color(0xFF008000), Color.Magenta, Color.Cyan,
-            Color.Yellow, Color.Green, Color.Gray, Color(0xFFFFA500), Color(0xFF800080)
-        )
+    val clusterColors = remember(points.map { it.clusterId }.distinct().sorted()) {
+        mutableMapOf<Int, Color>()
     }
 
     Canvas(modifier = Modifier.fillMaxSize().padding(8.dp)) {
@@ -269,7 +258,9 @@ fun ClusterVisualizer(points: List<Point>) {
             val color = if (point.clusterId < 0) {
                 Color.Black
             } else {
-                colors[point.clusterId % colors.size]
+                clusterColors.getOrPut(point.clusterId) {
+                    generateColorForCluster(point.clusterId)
+                }
             }
 
             drawCircle(
@@ -278,5 +269,20 @@ fun ClusterVisualizer(points: List<Point>) {
                 radius = 3.dp.toPx()
             )
         }
+    }
+}
+
+private fun generateColorForCluster(clusterId: Int): Color {
+    val baseColors = listOf(
+        Color.Red, Color.Blue, Color.Green, Color.Magenta, Color.Cyan,
+        Color.Yellow, Color(0xFF800080), Color(0xFFFFA500), Color(0xFF00CED1),
+        Color(0xFF8B4513)
+    )
+
+    return if (clusterId < baseColors.size) {
+        baseColors[clusterId]
+    } else {
+        val hue = (clusterId * 137.5f) % 360f
+        Color.hsv(hue, 0.7f, 0.9f)
     }
 }
