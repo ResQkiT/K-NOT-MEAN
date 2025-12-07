@@ -9,39 +9,92 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import ru.mephi.k_not_mean.core.KMeans
 import ru.mephi.k_not_mean.core.Point
-import ru.mephi.k_not_mean.core.Point2D
 import ru.mephi.k_not_mean.core.TaskDimension
 import ru.mephi.k_not_mean.windows.Platform
 
 @Composable
-fun ClusteringScreen(
+fun ClusteringScreen() {
+    val coroutineScope = rememberCoroutineScope()
 
-) {
     var selectedDimension by remember { mutableStateOf(TaskDimension.DIMENSION_2D) }
     var dimensionCount by remember { mutableStateOf("4") }
-    var points by remember { mutableStateOf<List<Point2D>>(emptyList()) }
+
+    val points = remember { mutableStateListOf<Point>() }
     var isLoading by remember { mutableStateOf(false) }
+    var isProcessing by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf("Готов к работе") }
 
-    fun performLoad() {
+    var targetClustersCount by remember { mutableStateOf("3") }
+
+
+    val performLoad: () -> Unit = {
         isLoading = true
         statusMessage = "Выбор файла..."
 
-        try {
-            val loadedPoints = Platform.openFileDialogAndParse()
-            if (loadedPoints != null) {
-                points = loadedPoints.filterIsInstance<Point2D>()
-                statusMessage = "Загружено ${loadedPoints.size} строк. Визуализируется ${points.size} точек (2D)."
-            } else {
-                statusMessage = "Загрузка отменена"
+        coroutineScope.launch {
+            try {
+                val loadedPoints = withContext(Dispatchers.IO) {
+                    Platform.openFileDialogAndParse()
+                }
+
+                if (loadedPoints != null) {
+                    points.clear()
+                    points.addAll(loadedPoints)
+                    val visualizableCount = loadedPoints.count { it.dimension == 2 }
+                    statusMessage = "Загружено ${loadedPoints.size} строк. Визуализируется ${visualizableCount} точек."
+                } else {
+                    statusMessage = "Загрузка отменена"
+                }
+            } catch (e: Exception) {
+                statusMessage = "Ошибка: ${e.message}"
+            } finally {
+                isLoading = false
             }
-        } catch (e: Exception) {
-            statusMessage = "Ошибка: ${e.message}"
-        } finally {
-            isLoading = false
         }
     }
+
+
+    val performClustering: () -> Unit = fun() {
+
+        if (points.isEmpty()) {
+            statusMessage = "Ошибка: Сначала загрузите данные."
+            return
+        }
+
+        val k = targetClustersCount.toIntOrNull()
+        val maxK = points.size.toString()
+
+        if (k == null || k < 1 || k > points.size) {
+            statusMessage = "Ошибка: Неверное K. K должно быть от 1 до $maxK."
+            return
+        }
+
+        isProcessing = true
+        statusMessage = "Кластеризация (K=$k)..."
+
+        coroutineScope.launch(Dispatchers.Default) {
+            try {
+                val clusteredResult = KMeans.cluster(points, k)
+                points.clear()
+                points.addAll(clusteredResult)
+                statusMessage = "Кластеризация успешно завершена. Найдено $k кластеров."
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    statusMessage = "Ошибка кластеризации: ${e.message}"
+                }
+            } finally {
+                withContext(Dispatchers.Main) {
+                    isProcessing = false
+                }
+            }
+        }
+    }
+
 
     Column(modifier = Modifier.fillMaxSize().padding(12.dp)) {
         Text(
@@ -54,10 +107,14 @@ fun ClusteringScreen(
         ControlPanel(
             selectedDimension = selectedDimension,
             dimensionCount = dimensionCount,
+            targetClustersCount = targetClustersCount,
             onDimensionChange = { selectedDimension = it },
             onCountChange = { dimensionCount = it },
-            onLoadClick = { performLoad() },
-            isLoading = isLoading
+            onClusterCountChange = { targetClustersCount = it },
+            onLoadClick = performLoad,
+            onProcessDots = performClustering,
+            isLoading = isLoading,
+            isProcessing = isProcessing
         )
 
         Text(
@@ -67,7 +124,7 @@ fun ClusteringScreen(
             modifier = Modifier.padding(vertical = 4.dp)
         )
 
-        Divider(modifier = Modifier.padding(vertical = 8.dp))
+        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
         Box(
             modifier = Modifier
@@ -80,25 +137,29 @@ fun ClusteringScreen(
             if (points.isEmpty()) {
                 Text("Нет данных", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
             } else {
-                if (selectedDimension == TaskDimension.DIMENSION_2D) {
-                    ClusterVisualizer(points)
-                } else {
-                    Text("График доступен только в 2D", style = MaterialTheme.typography.bodySmall)
-                }
+                ClusterVisualizer(points)
             }
         }
     }
 }
+
+// -----------------------------------------------------------
+// КОМПОНЕНТ ПАНЕЛИ УПРАВЛЕНИЯ
+// -----------------------------------------------------------
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ControlPanel(
     selectedDimension: TaskDimension,
     dimensionCount: String,
+    targetClustersCount: String,
     onDimensionChange: (TaskDimension) -> Unit,
     onCountChange: (String) -> Unit,
+    onClusterCountChange: (String) -> Unit,
     onLoadClick: () -> Unit,
-    isLoading: Boolean
+    onProcessDots: () -> Unit,
+    isLoading: Boolean,
+    isProcessing: Boolean
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -124,7 +185,7 @@ fun ControlPanel(
                 expanded = expanded,
                 onDismissRequest = { expanded = false }
             ) {
-                TaskDimension.values().forEach { dim ->
+                TaskDimension.entries.forEach { dim ->
                     DropdownMenuItem(
                         text = { Text(dim.label, style = MaterialTheme.typography.bodySmall) },
                         onClick = {
@@ -147,13 +208,34 @@ fun ControlPanel(
             )
         }
 
+        OutlinedTextField(
+            value = targetClustersCount,
+            onValueChange = { if (it.all { char -> char.isDigit() } && it.isNotEmpty()) onClusterCountChange(it) },
+            label = { Text("K", style = MaterialTheme.typography.labelSmall) },
+            textStyle = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.width(60.dp),
+            singleLine = true
+        )
+
 
         Button(
-            onClick = onLoadClick,
-            enabled = !isLoading,
+            onClick = onProcessDots,
+            enabled = !isProcessing && !isLoading,
             modifier = Modifier.height(50.dp),
             shape = MaterialTheme.shapes.small
         ) {
+            if (isProcessing) {
+                CircularProgressIndicator(strokeWidth = 2.dp, color = Color.White)
+            } else {
+                Text("Кластеризовать!", style = MaterialTheme.typography.labelMedium)
+            }
+        }
+        Button(
+            onClick = onLoadClick,
+            enabled = !isLoading && !isProcessing,
+            modifier = Modifier.height(50.dp),
+            shape = MaterialTheme.shapes.small
+        ){
             if (isLoading) {
                 CircularProgressIndicator(strokeWidth = 2.dp, color = Color.White)
             } else {
@@ -163,18 +245,36 @@ fun ControlPanel(
     }
 }
 
+// -----------------------------------------------------------
+// КОМПОНЕНТ ВИЗУАЛИЗАЦИИ
+// -----------------------------------------------------------
+
 @Composable
-fun ClusterVisualizer(points: List<Point2D>) {
-    val colors = listOf(Color.Red, Color.Blue, Color(0xFF008000), Color.Magenta, Color.Cyan)
+fun ClusterVisualizer(points: List<Point>) {
+    val colors = remember {
+        listOf(
+            Color.Red, Color.Blue, Color(0xFF008000), Color.Magenta, Color.Cyan,
+            Color.Yellow, Color.Green, Color.Gray, Color(0xFFFFA500), Color(0xFF800080)
+        )
+    }
 
     Canvas(modifier = Modifier.fillMaxSize().padding(8.dp)) {
         val w = size.width
         val h = size.height
 
         points.forEach { point ->
+            val x = point.coordinates.getOrNull(0) ?: 0.0
+            val y = point.coordinates.getOrNull(1) ?: 0.0
+
+            val color = if (point.clusterId < 0) {
+                Color.Black
+            } else {
+                colors[point.clusterId % colors.size]
+            }
+
             drawCircle(
-                color = colors[point.clusterId % colors.size],
-                center = Offset(point.x * w, point.y * h),
+                color = color,
+                center = Offset(x.toFloat() * w, y.toFloat() * h),
                 radius = 3.dp.toPx()
             )
         }

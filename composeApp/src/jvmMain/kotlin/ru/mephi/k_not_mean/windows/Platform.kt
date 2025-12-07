@@ -11,18 +11,64 @@ class Platform {
     companion object{
 
         lateinit var delimiter : String
+        private val CLUSTER_NAMES_SET = setOf("cluster", "label", "id", "class")
+
         fun openFileDialogAndParse(): List<Point>? {
             val dialog = FileDialog(null as Frame?, "Выберите CSV файл", FileDialog.LOAD)
             dialog.file = "*.csv;*.txt"
             dialog.isVisible = true
             val fileName = dialog.file
             val directory = dialog.directory
+
             if (fileName == null || directory == null) return null
+
             val file = File(directory, fileName)
-            return parseCsvFile(file)
+
+            val rawPoints = parseCsvFile(file)
+
+            return if (rawPoints.isNotEmpty()) {
+                normalizePoints(rawPoints)
+            } else {
+                emptyList()
+            }
         }
 
-        private val CLUSTER_NAMES_SET = setOf("cluster", "label", "id", "class")
+        /**
+         * 📐 Нормализует координаты всех точек в списке в диапазон [0, 1]
+         * с помощью метода Min-Max Scaling.
+         * * Это необходимо для корректной визуализации на Canvas.
+         */
+        fun normalizePoints(points: List<Point>): List<Point> {
+            if (points.isEmpty()) return emptyList()
+
+            val dimension = points.first().dimension
+
+            val minCoords = DoubleArray(dimension) { i ->
+                points.minOf { it.coordinates[i] }
+            }
+            val maxCoords = DoubleArray(dimension) { i ->
+                points.maxOf { it.coordinates[i] }
+            }
+
+            val normalizedPoints = points.map { oldPoint ->
+                val newCoords = DoubleArray(dimension) { i ->
+                    val range = maxCoords[i] - minCoords[i]
+
+                    if (range == 0.0) {
+                        0.5
+                    } else {
+                        (oldPoint.coordinates[i] - minCoords[i]) / range
+                    }
+                }
+
+                when (dimension) {
+                    2 -> Point2D(newCoords[0], newCoords[1], oldPoint.clusterId)
+                    else -> NDPoint(newCoords, oldPoint.clusterId)
+                }
+            }
+
+            return normalizedPoints
+        }
 
         private fun parseCsvFile(file: File): List<Point> {
             val lines = file.readLines().filter { it.isNotBlank() }
@@ -72,4 +118,3 @@ class Platform {
         }
     }
 }
-
