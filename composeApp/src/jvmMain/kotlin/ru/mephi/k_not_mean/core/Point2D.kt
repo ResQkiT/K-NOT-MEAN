@@ -15,4 +15,5 @@ class Point2D(
             clusterId = clusterId
         )
     }
+
 }

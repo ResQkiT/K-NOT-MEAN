@@ -14,22 +14,17 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import ru.mephi.k_not_mean.core.KMeans
 import ru.mephi.k_not_mean.core.Point
-import ru.mephi.k_not_mean.core.Point2D
 import ru.mephi.k_not_mean.core.TaskDimension
-import ru.mephi.k_not_mean.windows.Platform // Используем Platform, где находится функция normalizePoints
-
-// -----------------------------------------------------------
-// ГЛАВНЫЙ КОМПОНЕНТ
-// -----------------------------------------------------------
+import ru.mephi.k_not_mean.windows.Platform
 
 @Composable
 fun ClusteringScreen() {
-    val coroutineScope = rememberCoroutineScope() // Для запуска корутин
+    val coroutineScope = rememberCoroutineScope()
 
     var selectedDimension by remember { mutableStateOf(TaskDimension.DIMENSION_2D) }
     var dimensionCount by remember { mutableStateOf("4") }
 
-    var points by remember { mutableStateOf<List<Point>>(emptyList()) }
+    val points = remember { mutableStateListOf<Point>() }
     var isLoading by remember { mutableStateOf(false) }
     var isProcessing by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf("Готов к работе") }
@@ -48,7 +43,8 @@ fun ClusteringScreen() {
                 }
 
                 if (loadedPoints != null) {
-                    points = loadedPoints
+                    points.clear()
+                    points.addAll(loadedPoints)
                     val visualizableCount = loadedPoints.count { it.dimension == 2 }
                     statusMessage = "Загружено ${loadedPoints.size} строк. Визуализируется ${visualizableCount} точек."
                 } else {
@@ -65,7 +61,6 @@ fun ClusteringScreen() {
 
     val performClustering: () -> Unit = fun() {
 
-        // --- Шаг 1: Проверка ошибок (синхронная) ---
         if (points.isEmpty()) {
             statusMessage = "Ошибка: Сначала загрузите данные."
             return
@@ -84,17 +79,9 @@ fun ClusteringScreen() {
 
         coroutineScope.launch(Dispatchers.Default) {
             try {
-
-                var clusteredResult = KMeans.cluster(points, k)
-                clusteredResult.forEach {
-                    print(it.clusterId)
-                }
-                withContext(Dispatchers.Main) {
-                    points = clusteredResult
-                    points.forEach {
-                        print(it.clusterId)
-                    }
-                }
+                val clusteredResult = KMeans.cluster(points, k)
+                points.clear()
+                points.addAll(clusteredResult)
                 statusMessage = "Кластеризация успешно завершена. Найдено $k кластеров."
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {

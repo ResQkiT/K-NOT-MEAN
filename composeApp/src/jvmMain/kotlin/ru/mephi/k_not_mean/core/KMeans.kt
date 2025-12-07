@@ -44,7 +44,7 @@ class KMeans {
                 centroids = newCentroids
             }
 
-            println("K-Means завершился после $maxIterations итераций (не сошелся).")
+            println("K-Means is ended after $maxIterations итераций (не сошелся).")
             clusteredPoints.forEach { println(it.clusterId) }
             println()
             return clusteredPoints
