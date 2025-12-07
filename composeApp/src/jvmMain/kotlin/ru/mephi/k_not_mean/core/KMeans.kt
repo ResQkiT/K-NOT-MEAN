@@ -34,19 +34,11 @@ class KMeans {
                 val newCentroids = updateCentroids(clusteredPoints, targetClusters, dimension)
 
                 if (hasConverged(oldCentroids, newCentroids)) {
-                    println("K-Means завершился после $maxIterations итераций (не сошелся).")
-                    clusteredPoints.forEach { println(it.clusterId) }
-                    println()
-                    println("K-Means сошелся за $i итераций.")
                     return clusteredPoints.toList()
                 }
 
                 centroids = newCentroids
             }
-
-            println("K-Means is ended after $maxIterations итераций (не сошелся).")
-            clusteredPoints.forEach { println(it.clusterId) }
-            println()
             return clusteredPoints
         }
 
