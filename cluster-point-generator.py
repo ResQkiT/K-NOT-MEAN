@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import time
 
 def generate_nd_points(num_points: int, dimension: int, num_clusters: int = 4, filename: str = 'test_data.csv') -> pd.DataFrame:
     """
@@ -94,9 +95,9 @@ def generate_statistical_points(
     return df
 
 df_result = generate_statistical_points(
-    num_points=10000,
+    num_points=100000,
     dimension=2,
-    filename='nd_clustering_test.csv'
+    filename='nd_clustering_test'+ str(time.time()) + '.csv'
 )
 
 print("\nПервые 5 строк сгенерированных данных:")

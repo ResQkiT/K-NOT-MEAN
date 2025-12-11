@@ -12,6 +12,7 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
+            implementation(compose.desktop.currentOs)
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)
