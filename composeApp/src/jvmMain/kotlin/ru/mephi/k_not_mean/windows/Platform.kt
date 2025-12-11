@@ -6,115 +6,359 @@ import ru.mephi.k_not_mean.core.Point2D
 import java.awt.FileDialog
 import java.awt.Frame
 import java.io.File
+import kotlinx.coroutines.*
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import kotlin.system.measureTimeMillis
 
 class Platform {
-    companion object{
-
-        lateinit var delimiter : String
+    companion object {
+        lateinit var delimiter: String
         private val CLUSTER_NAMES_SET = setOf("cluster", "label", "id", "class")
 
-        fun openFileDialogAndParse(): List<Point>? {
-            val dialog = FileDialog(null as Frame?, "Выберите CSV файл", FileDialog.LOAD)
+        private val dispatcher = Dispatchers.Default
+
+        // Конфигурация отладки
+        private var debugEnabled = true
+        private val logFile = File("parallel_debug.log")
+
+        init {
+            // Очищаем старый лог при запуске
+            if (debugEnabled) {
+                logFile.writeText("=== PARALLEL DATA LOADING ===\n")
+                logFile.appendText("Start: ${LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)}\n\n")
+            }
+        }
+
+        suspend fun openFileDialogAndParse(): List<Point>? = withContext(Dispatchers.Main) {
+            val dialog = FileDialog(null as Frame?, "Select CSV file", FileDialog.LOAD)
             dialog.file = "*.csv;*.txt"
             dialog.isVisible = true
             val fileName = dialog.file
             val directory = dialog.directory
 
-            if (fileName == null || directory == null) return null
+            if (fileName == null || directory == null) return@withContext null
 
             val file = File(directory, fileName)
 
-            val rawPoints = parseCsvFile(file)
+            logDebug("=== FILE LOADING START ===")
+            logDebug("File: ${file.name}")
+            logDebug("Size: ${file.length() / 1024} KB")
+            logDebug("Available processors: ${Runtime.getRuntime().availableProcessors()}")
+            logDebug("Max memory: ${Runtime.getRuntime().maxMemory() / (1024*1024)} MB")
+            logDebug("Free memory: ${Runtime.getRuntime().freeMemory() / (1024*1024)} MB")
 
-            return if (rawPoints.isNotEmpty()) {
-                normalizePoints(rawPoints)
+            val rawPoints: List<Point>
+            val parsingTime = measureTimeMillis {
+                rawPoints = withContext(dispatcher) {
+                    parseCsvFile(file)
+                }
+            }
+            logDebug("CSV parsing took: ${parsingTime} ms")
+
+            return@withContext if (rawPoints.isNotEmpty()) {
+                val normalizedPoints: List<Point>
+                val normalizationTime = measureTimeMillis {
+                    normalizedPoints = normalizePoints(rawPoints)
+                }
+                logDebug("Normalization took: ${normalizationTime} ms")
+                logDebug("=== LOADING COMPLETED ===\n")
+                normalizedPoints
             } else {
+                logDebug("File contains no data")
                 emptyList()
             }
         }
 
         /**
-         * 📐 Нормализует координаты всех точек в списке в диапазон [0, 1]
-         * с помощью метода Min-Max Scaling.
-         * * Это необходимо для корректной визуализации на Canvas.
+         * 📐 Normalizes all point coordinates to range [0, 1]
+         * using Min-Max Scaling.
+         * Parallelizes min/max computation and normalization.
          */
-        fun normalizePoints(points: List<Point>): List<Point> {
-            if (points.isEmpty()) return emptyList()
+        fun normalizePoints(points: List<Point>): List<Point> = runBlocking {
+            if (points.isEmpty()) return@runBlocking emptyList()
+
+            logDebug("\n=== NORMALIZATION START ===")
+            logDebug("Number of points: ${points.size}")
+            logDebug("Dimension: ${points.first().dimension}")
 
             val dimension = points.first().dimension
+            val availableProcessors = Runtime.getRuntime().availableProcessors()
 
-            val minCoords = DoubleArray(dimension) { i ->
-                points.minOf { it.coordinates[i] }
-            }
-            val maxCoords = DoubleArray(dimension) { i ->
-                points.maxOf { it.coordinates[i] }
-            }
+            // Parallel min/max calculation
+            var minCoords: DoubleArray
+            var maxCoords: DoubleArray
+            val minMaxTime = measureTimeMillis {
+                val result = withContext(dispatcher) {
+                    val mins = DoubleArray(dimension) { Double.POSITIVE_INFINITY }
+                    val maxs = DoubleArray(dimension) { Double.NEGATIVE_INFINITY }
 
-            val normalizedPoints = points.map { oldPoint ->
-                val newCoords = DoubleArray(dimension) { i ->
-                    val range = maxCoords[i] - minCoords[i]
+                    val segmentCount = minOf(points.size, availableProcessors)
+                    val segmentSize = (points.size + segmentCount - 1) / segmentCount // ceil division
 
-                    if (range == 0.0) {
-                        0.5
-                    } else {
-                        (oldPoint.coordinates[i] - minCoords[i]) / range
+                    logDebug("Segments: $segmentCount")
+                    logDebug("Segment size: $segmentSize")
+
+                    val segments = points.chunked(segmentSize)
+
+                    val segmentResults = segments.mapIndexed { segmentIndex, segment ->
+                        async {
+                            logDebug("Segment $segmentIndex: processing ${segment.size} points started")
+                            val localMins = DoubleArray(dimension) { Double.POSITIVE_INFINITY }
+                            val localMaxs = DoubleArray(dimension) { Double.NEGATIVE_INFINITY }
+
+                            for (point in segment) {
+                                for (i in 0 until dimension) {
+                                    val coord = point.coordinates[i]
+                                    if (coord < localMins[i]) localMins[i] = coord
+                                    if (coord > localMaxs[i]) localMaxs[i] = coord
+                                }
+                            }
+
+                            logDebug("Segment $segmentIndex: processing completed")
+                            Pair(localMins, localMaxs)
+                        }
+                    }
+
+                    segmentResults.awaitAll().fold(Pair(mins, maxs)) { acc, segmentResult ->
+                        val (segmentMins, segmentMaxs) = segmentResult
+                        for (i in 0 until dimension) {
+                            if (segmentMins[i] < acc.first[i]) acc.first[i] = segmentMins[i]
+                            if (segmentMaxs[i] > acc.second[i]) acc.second[i] = segmentMaxs[i]
+                        }
+                        acc
                     }
                 }
-
-                when (dimension) {
-                    2 -> Point2D(newCoords[0], newCoords[1], oldPoint.clusterId)
-                    else -> NDPoint(newCoords, oldPoint.clusterId)
-                }
+                minCoords = result.first
+                maxCoords = result.second
             }
 
-            return normalizedPoints
+            logDebug("Min values: ${minCoords.joinToString(", ", limit = 5)}")
+            logDebug("Max values: ${maxCoords.joinToString(", ", limit = 5)}")
+
+            // Parallel point normalization
+            val normalizedPoints = withContext(dispatcher) {
+                val segmentCount = minOf(points.size, availableProcessors)
+                val segmentSize = (points.size + segmentCount - 1) / segmentCount // ceil division
+                val segments = points.chunked(segmentSize)
+
+                logDebug("Normalization threads: ${segments.size}")
+
+                segments.mapIndexed { segmentIndex, segment ->
+                    async {
+                        logDebug("Normalization thread $segmentIndex: processing ${segment.size} points")
+                        segment.map { oldPoint ->
+                            val newCoords = DoubleArray(dimension) { i ->
+                                val range = maxCoords[i] - minCoords[i]
+
+                                if (range == 0.0) {
+                                    0.5
+                                } else {
+                                    (oldPoint.coordinates[i] - minCoords[i]) / range
+                                }
+                            }
+
+                            when (dimension) {
+                                2 -> Point2D(newCoords[0], newCoords[1], oldPoint.clusterId)
+                                else -> NDPoint(newCoords, oldPoint.clusterId)
+                            }
+                        }
+                    }
+                }.awaitAll().flatten()
+            }
+
+            val normalizationTime = measureTimeMillis {
+                // Normalization already done above, this just measures the awaitAll time
+            }
+
+            logDebug("Min/Max calculation time: ${minMaxTime} ms")
+            logDebug("Normalization time: ${normalizationTime} ms")
+            logDebug("Total time: ${minMaxTime + normalizationTime} ms")
+
+            return@runBlocking normalizedPoints
         }
 
-        private fun parseCsvFile(file: File): List<Point> {
+        private suspend fun parseCsvFile(file: File): List<Point> = withContext(dispatcher) {
             val lines = file.readLines().filter { it.isNotBlank() }
-            if (lines.isEmpty()) return emptyList()
+            if (lines.isEmpty()) return@withContext emptyList()
+
+            logDebug("\n=== CSV PARSING ===")
+            logDebug("Total lines in file: ${lines.size}")
 
             val headerRow = lines.first()
-
             delimiter = if (headerRow.contains(';')) ";" else ","
+            logDebug("Delimiter: '$delimiter'")
 
             val headers = headerRow.split(delimiter).map { it.trim().lowercase() }
+            logDebug("Headers (${headers.size}): ${headers.joinToString(", ")}")
 
             val clusterIndex = headers.indexOfFirst { CLUSTER_NAMES_SET.contains(it) }
+            logDebug("Cluster index: $clusterIndex")
 
             val coordinateIndices = headers.indices.filter { it != clusterIndex }
+            logDebug("Coordinate indices: ${coordinateIndices.joinToString(", ")}")
 
-            val points = lines.drop(1).mapNotNull { line ->
-                try {
-                    val parts = line.split(delimiter).map { it.trim() }
+            // Split lines for parallel processing
+            val dataLines = lines.drop(1)
+            logDebug("Data lines: ${dataLines.size}")
 
-                    if (parts.size != headers.size) return@mapNotNull null
+            val availableProcessors = Runtime.getRuntime().availableProcessors()
+            val chunkSize = (dataLines.size / availableProcessors).coerceAtLeast(1)
 
-                    val clusterId = if (clusterIndex != -1) {
-                        parts[clusterIndex].toIntOrNull() ?: -1
-                    } else {
-                        -1
-                    }
+            logDebug("Available processors: $availableProcessors")
+            logDebug("Chunk size: $chunkSize")
 
-                    val coords = coordinateIndices.mapNotNull { index ->
-                        parts.getOrNull(index)?.toDoubleOrNull()
-                    }.toDoubleArray()
+            val points = if (dataLines.size < 1000) {
+                logDebug("Using sequential parsing (small dataset)")
+                parseLinesSequentially(dataLines, headers, clusterIndex, coordinateIndices)
+            } else {
+                logDebug("Using parallel parsing")
+                parseLinesInParallel(dataLines, chunkSize, headers, clusterIndex, coordinateIndices)
+            }
 
-                    if (coords.size < 2) return@mapNotNull null
+            logDebug("Loaded points: ${points.size}")
+            return@withContext points
+        }
 
-                    val point: Point = when (coords.size) {
-                        2 -> Point2D(coords[0], coords[1], clusterId)
-                        else -> NDPoint(coords, clusterId)
-                    }
+        private fun parseLinesSequentially(
+            lines: List<String>,
+            headers: List<String>,
+            clusterIndex: Int,
+            coordinateIndices: List<Int>
+        ): List<Point> {
+            val points = mutableListOf<Point>()
+            var parsedCount = 0
+            var errorCount = 0
 
-                    return@mapNotNull point
-
-                } catch (e: Exception) {
-                    println("Ошибка парсинга строки: $line (${e.message})")
-                    null
+            for (line in lines) {
+                val point = parseLine(line, headers, clusterIndex, coordinateIndices)
+                if (point != null) {
+                    points.add(point)
+                    parsedCount++
+                } else {
+                    errorCount++
                 }
             }
+
+            logDebug("Successfully parsed: $parsedCount lines")
+            logDebug("Parsing errors: $errorCount lines")
             return points
+        }
+
+        private suspend fun parseLinesInParallel(
+            lines: List<String>,
+            chunkSize: Int,
+            headers: List<String>,
+            clusterIndex: Int,
+            coordinateIndices: List<Int>
+        ): List<Point> = withContext(dispatcher) {
+            val chunks = lines.chunked(chunkSize)
+            logDebug("Created chunks: ${chunks.size}")
+
+            val startTime = System.currentTimeMillis()
+
+            val chunkResults = chunks.mapIndexed { chunkIndex, chunk ->
+                async {
+                    val threadName = Thread.currentThread().name
+                    logDebug("Chunk $chunkIndex started in thread: $threadName")
+
+                    val chunkStartTime = System.currentTimeMillis()
+                    val localPoints = mutableListOf<Point>()
+                    var parsedCount = 0
+                    var errorCount = 0
+
+                    for (line in chunk) {
+                        val point = parseLine(line, headers, clusterIndex, coordinateIndices)
+                        if (point != null) {
+                            localPoints.add(point)
+                            parsedCount++
+                        } else {
+                            errorCount++
+                        }
+                    }
+
+                    val chunkTime = System.currentTimeMillis() - chunkStartTime
+                    logDebug("Chunk $chunkIndex completed: $parsedCount points, $errorCount errors, time: ${chunkTime}ms")
+
+                    localPoints
+                }
+            }
+
+            val allPoints = chunkResults.awaitAll().flatten()
+            val totalTime = System.currentTimeMillis() - startTime
+
+            logDebug("All chunks completed in ${totalTime}ms")
+            logDebug("Total points loaded: ${allPoints.size}")
+
+            return@withContext allPoints
+        }
+
+        private fun parseLine(
+            line: String,
+            headers: List<String>,
+            clusterIndex: Int,
+            coordinateIndices: List<Int>
+        ): Point? {
+            return try {
+                val parts = line.split(delimiter).map { it.trim() }
+
+                if (parts.size != headers.size) return null
+
+                val clusterId = if (clusterIndex != -1) {
+                    parts[clusterIndex].toIntOrNull() ?: -1
+                } else {
+                    -1
+                }
+
+                val coords = coordinateIndices.mapNotNull { index ->
+                    parts.getOrNull(index)?.toDoubleOrNull()
+                }.toDoubleArray()
+
+                if (coords.size < 2) return null
+
+                val point: Point = when (coords.size) {
+                    2 -> Point2D(coords[0], coords[1], clusterId)
+                    else -> NDPoint(coords, clusterId)
+                }
+
+                point
+            } catch (e: Exception) {
+                null
+            }
+        }
+
+        private fun logDebug(message: String) {
+            if (debugEnabled) {
+                val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss.SSS"))
+                val logMessage = "[$timestamp] $message"
+                println(logMessage)
+                try {
+                    logFile.appendText("$logMessage\n")
+                } catch (e: Exception) {
+                    // Ignore file write errors
+                }
+            }
+        }
+
+        fun enableDebug(enable: Boolean) {
+            debugEnabled = enable
+        }
+
+        fun getDebugLog(): String {
+            return try {
+                logFile.readText()
+            } catch (e: Exception) {
+                "Error reading log file: ${e.message}"
+            }
+        }
+
+        fun clearDebugLog() {
+            try {
+                logFile.writeText("=== PARALLEL DATA LOADING ===\n")
+                logFile.appendText("Start: ${LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)}\n\n")
+            } catch (e: Exception) {
+                println("Error clearing log: ${e.message}")
+            }
         }
     }
 }
