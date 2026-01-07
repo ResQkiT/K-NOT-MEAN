@@ -8,7 +8,11 @@ class KMeans {
     companion object {
 
         /**
-         * Поиск оптимального K по минимальной стоимости
+         * Автоматический подбор K с ранней остановкой
+         *
+         * Предполагается унимодальность функции стоимости:
+         * при росте K сначала стоимость уменьшается,
+         * затем начинает расти из-за стоимости строительства.
          */
         fun clusterWithAutoK(
             points: List<Point>,
@@ -21,8 +25,11 @@ class KMeans {
             require(maxK > 0)
 
             var bestResult: ClusteringResult? = null
+            var previousCost = Double.MAX_VALUE
+            var growthCounter = 0
 
             for (k in 1..maxK) {
+
                 val result = cluster(
                     points = points,
                     targetClusters = k,
@@ -31,9 +38,27 @@ class KMeans {
                     mode = mode
                 )
 
-                if (bestResult == null || result.totalCost < bestResult.totalCost) {
+                val currentCost = result.totalCost
+
+                if (bestResult == null || currentCost < bestResult.totalCost) {
                     bestResult = result
                 }
+
+                /**
+                 * Ранняя остановка:
+                 * если стоимость начала расти несколько раз подряд —
+                 * дальнейший перебор нецелесообразен
+                 */
+                if (currentCost > previousCost) {
+                    growthCounter++
+                    if (growthCounter >= 2) {
+                        break
+                    }
+                } else {
+                    growthCounter = 0
+                }
+
+                previousCost = currentCost
             }
 
             return bestResult!!

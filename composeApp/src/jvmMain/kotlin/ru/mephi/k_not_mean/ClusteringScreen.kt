@@ -116,7 +116,10 @@ fun ClusteringScreen() {
         modifier = Modifier.fillMaxSize().padding(12.dp)
     ) {
 
-        Text("K-Means с автоматическим подбором K", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "K-Means с автоматическим подбором K",
+            style = MaterialTheme.typography.titleMedium
+        )
 
         Spacer(Modifier.height(8.dp))
 
@@ -186,7 +189,8 @@ fun ClusteringScreen() {
         Spacer(Modifier.height(8.dp))
 
         Box(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
                 .border(1.dp, Color.LightGray)
                 .background(Color(0xFFF5F5F5))
         ) {
@@ -210,8 +214,18 @@ fun PointsCanvas(
     )
 
     Canvas(modifier = Modifier.fillMaxSize()) {
-        val w = size.width
-        val h = size.height
+
+        // Внутренний отступ от рамки (в пикселях)
+        val paddingPx = 24f
+
+        val drawWidth = size.width - 2 * paddingPx
+        val drawHeight = size.height - 2 * paddingPx
+
+        fun mapX(x: Double): Float =
+            (paddingPx + x * drawWidth).toFloat()
+
+        fun mapY(y: Double): Float =
+            (paddingPx + y * drawHeight).toFloat()
 
         points.forEach { p ->
             if (p.dimension >= 2 && p.clusterId >= 0) {
@@ -219,8 +233,8 @@ fun PointsCanvas(
                     color = colors[p.clusterId % colors.size],
                     radius = 4f,
                     center = Offset(
-                        (p.coordinates[0] * w).toFloat(),
-                        (p.coordinates[1] * h).toFloat()
+                        mapX(p.coordinates[0]),
+                        mapY(p.coordinates[1])
                     )
                 )
             }
@@ -231,8 +245,8 @@ fun PointsCanvas(
                 color = Color.Black,
                 radius = 8f,
                 center = Offset(
-                    (c.coordinates[0] * w).toFloat(),
-                    (c.coordinates[1] * h).toFloat()
+                    mapX(c.coordinates[0]),
+                    mapY(c.coordinates[1])
                 )
             )
         }
