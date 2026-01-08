@@ -36,7 +36,7 @@ def generate_nd_points(num_points: int, dimension: int, num_clusters: int = 4, f
 
     df['cluster'] = labels
 
-    df.to_csv(filename, index=False)
+    df.to_csv(r"C:\Users\user\Documents\GitHub\K-NOT-MEAN\K-NOT-MEAN"+filename, index=False)
     print(f"✅ Успешно сгенерировано {num_points} точек в {dimension}D пространстве.")
     print(f"Файл сохранен как '{filename}'")
 
@@ -85,7 +85,7 @@ def generate_statistical_points(
     column_names = [f'dim{i+1}' for i in range(dimension)]
     df = pd.DataFrame(data, columns=column_names)
     
-    df['cluster'] = -1
+    df['cluster'] = 0
     
     df.to_csv(filename, index=False)
     print(f"\n✨ Успешно сгенерировано {num_points} точек в {dimension}D пространстве.")
