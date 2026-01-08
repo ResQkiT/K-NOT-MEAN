@@ -1,5 +1,6 @@
 package ru.mephi.k_not_mean.core
 
+import ru.mephi.k_not_mean.core.KMeans.Companion.euclideanDistanceSquared
 import kotlin.math.sqrt
 
 object CostCalculator {
@@ -13,7 +14,7 @@ object CostCalculator {
         val transportCost = points.sumOf { point ->
             val centroid = centroids.first { it.clusterId == point.clusterId }
             val distance = sqrt(
-                KMeans.euclideanDistanceSquared(
+                euclideanDistanceSquared(
                     point.coordinates,
                     centroid.coordinates
                 )
