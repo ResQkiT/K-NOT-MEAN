@@ -7,13 +7,6 @@ class KMeans {
 
     companion object {
 
-        /**
-         * Автоматический подбор K с ранней остановкой
-         *
-         * Предполагается унимодальность функции стоимости:
-         * при росте K сначала стоимость уменьшается,
-         * затем начинает расти из-за стоимости строительства.
-         */
         fun clusterWithAutoK(
             points: List<Point>,
             maxK: Int,
@@ -21,17 +14,19 @@ class KMeans {
             maxIterations: Int = 100,
             mode: ExecutionMode = ExecutionMode.SEQUENTIAL
         ): ClusteringResult {
-
             require(maxK > 0)
 
             var bestResult: ClusteringResult? = null
             var previousCost = Double.MAX_VALUE
             var growthCounter = 0
 
-            for (k in 1..maxK) {
+            // Оптимизация: работаем с одним и тем же набором данных,
+            // меняя только id кластера внутри
+            val workingPoints = points.map { it.copy() }
 
-                val result = cluster(
-                    points = points,
+            for (k in 1..maxK) {
+                val result = clusterInternal(
+                    points = workingPoints,
                     targetClusters = k,
                     costModel = costModel,
                     maxIterations = maxIterations,
@@ -41,23 +36,16 @@ class KMeans {
                 val currentCost = result.totalCost
 
                 if (bestResult == null || currentCost < bestResult.totalCost) {
-                    bestResult = result
+                    // Копируем результат для сохранения лучшего состояния
+                    bestResult = result.copy(points = result.points.map { it.copy() })
                 }
 
-                /**
-                 * Ранняя остановка:
-                 * если стоимость начала расти несколько раз подряд —
-                 * дальнейший перебор нецелесообразен
-                 */
                 if (currentCost > previousCost) {
                     growthCounter++
-                    if (growthCounter >= 2) {
-                        break
-                    }
+                    if (growthCounter >= 2) break
                 } else {
                     growthCounter = 0
                 }
-
                 previousCost = currentCost
             }
 
@@ -65,78 +53,134 @@ class KMeans {
         }
 
         /**
-         * Классический K-Means для фиксированного K
+         * Внутренний метод для работы с мутабельными точками
          */
-        fun cluster(
+        private fun clusterInternal(
             points: List<Point>,
             targetClusters: Int,
             costModel: CostModel,
-            maxIterations: Int = 100,
-            mode: ExecutionMode = ExecutionMode.SEQUENTIAL
+            maxIterations: Int,
+            mode: ExecutionMode
         ): ClusteringResult {
-
-            if (points.isEmpty() || targetClusters <= 0) {
-                return ClusteringResult(points, emptyList(), 0, 0.0)
-            }
-
-            if (points.size < targetClusters) {
-                return ClusteringResult(points.map { it.copy() }, emptyList(), 0, 0.0)
-            }
+            if (points.isEmpty()) return ClusteringResult(points, emptyList(), 0, 0.0)
 
             val dimension = points.first().dimension
 
-            var centroids = points
-                .take(targetClusters)
-                .mapIndexed { index, point ->
-                    Centroid(point.coordinates.copyOf(), index)
-                }
-
-            var clusteredPoints = points.map { it.copy() }
+            // Инициализация центроидов (используем For-цикл вместо map для Desktop/JVM скорости)
+            var centroids = Array(targetClusters) { i ->
+                Centroid(points[i].coordinates.copyOf(), i)
+            }
 
             val elapsedTime = measureTimeMillis {
-
                 repeat(maxIterations) {
-
-                    val oldCentroids = centroids
-
-                    val (newPoints, _) = when (mode) {
-                        ExecutionMode.SEQUENTIAL ->
-                            assignPointsSequential(clusteredPoints, centroids)
-
-                        ExecutionMode.PARALLEL ->
-                            runBlocking {
-                                assignPointsParallel(clusteredPoints, centroids)
-                            }
+                    val changed = when (mode) {
+                        ExecutionMode.SEQUENTIAL -> assignPointsSequential(points, centroids)
+                        ExecutionMode.PARALLEL -> runBlocking { assignPointsParallel(points, centroids) }
                     }
 
-                    clusteredPoints = newPoints
+                    val newCentroids = updateCentroidsOptimized(points, targetClusters, dimension)
 
-                    val newCentroids =
-                        updateCentroids(clusteredPoints, targetClusters, dimension)
-
-                    if (hasConverged(oldCentroids, newCentroids)) {
-                        return@repeat
-                    }
-
-                    centroids = newCentroids
+                    if (!changed && hasConverged(centroids.toList(), newCentroids)) return@repeat
+                    centroids = newCentroids.toTypedArray()
                 }
             }
 
-            val totalCost = CostCalculator.calculateTotalCost(
-                clusteredPoints,
-                centroids,
-                costModel
-            )
-
-            return ClusteringResult(
-                points = clusteredPoints,
-                centroids = centroids,
-                timeMs = elapsedTime,
-                totalCost = totalCost
-            )
+            val totalCost = CostCalculator.calculateTotalCost(points, centroids.toList(), costModel)
+            return ClusteringResult(points, centroids.toList(), elapsedTime, totalCost)
         }
 
-        /* ================= ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ================= */
+        /* ================= ОПТИМИЗИРОВАННЫЕ МЕТОДЫ ================= */
+
+        /**
+         * Изменяем clusterId прямо в существующих объектах Point.
+         * Возвращаем true, если хотя бы одна точка сменила кластер.
+         */
+        private fun assignPointsSequential(points: List<Point>, centroids: Array<Centroid>): Boolean {
+            var anyChanged = false
+            for (point in points) {
+                val oldId = point.clusterId
+                var minDist = Double.MAX_VALUE
+                var bestCluster = oldId
+
+                for (centroid in centroids) {
+                    val d = euclideanDistanceSquared(point.coordinates, centroid.coordinates)
+                    if (d < minDist) {
+                        minDist = d
+                        bestCluster = centroid.clusterId
+                    }
+                }
+
+                if (oldId != bestCluster) {
+                    point.clusterId = bestCluster
+                    anyChanged = true
+                }
+            }
+            return anyChanged
+        }
+
+        private suspend fun assignPointsParallel(points: List<Point>, centroids: Array<Centroid>): Boolean = coroutineScope {
+            val cpuCount = Runtime.getRuntime().availableProcessors()
+            val chunkSize = (points.size + cpuCount - 1) / cpuCount
+
+            val results = points.chunked(chunkSize).map { chunk ->
+                async(Dispatchers.Default) {
+                    var localChanged = false
+                    for (point in chunk) {
+                        val oldId = point.clusterId
+                        var minDist = Double.MAX_VALUE
+                        var bestId = oldId
+
+                        for (centroid in centroids) {
+                            val d = euclideanDistanceSquared(point.coordinates, centroid.coordinates)
+                            if (d < minDist) {
+                                minDist = d
+                                bestId = centroid.clusterId
+                            }
+                        }
+                        if (oldId != bestId) {
+                            point.clusterId = bestId
+                            localChanged = true
+                        }
+                    }
+                    localChanged
+                }
+            }
+            results.awaitAll().any { it }
+        }
+
+        /**
+         * Уход от groupBy. Используем массивы-аккумуляторы.
+         */
+        private fun updateCentroidsOptimized(
+            points: List<Point>,
+            targetClusters: Int,
+            dimension: Int
+        ): List<Centroid> {
+            val sums = Array(targetClusters) { DoubleArray(dimension) }
+            val counts = IntArray(targetClusters)
+
+            // Проход один раз по всем точкам (O(N))
+            for (p in points) {
+                val cId = p.clusterId
+                if (cId == -1) continue
+                counts[cId]++
+                val sumArr = sums[cId]
+                val coords = p.coordinates
+                for (i in 0 until dimension) {
+                    sumArr[i] += coords[i]
+                }
+            }
+
+            return List(targetClusters) { i ->
+                val count = counts[i]
+                if (count > 0) {
+                    for (j in 0 until dimension) {
+                        sums[i][j] /= count
+                    }
+                }
+                Centroid(sums[i], i)
+            }
+        }
 
         fun euclideanDistanceSquared(a: DoubleArray, b: DoubleArray): Double {
             var sum = 0.0
@@ -147,147 +191,14 @@ class KMeans {
             return sum
         }
 
-        fun assignPointsSequential(
-            points: List<Point>,
-            centroids: List<Centroid>
-        ): Pair<List<Point>, Boolean> {
-
-            var changed = false
-
-            val result = points.map { oldPoint ->
-                var minDist = Double.MAX_VALUE
-                var bestCluster = oldPoint.clusterId
-
-                for (centroid in centroids) {
-                    val d = euclideanDistanceSquared(
-                        oldPoint.coordinates,
-                        centroid.coordinates
-                    )
-                    if (d < minDist) {
-                        minDist = d
-                        bestCluster = centroid.clusterId
-                    }
-                }
-
-                if (bestCluster != oldPoint.clusterId) {
-                    changed = true
-                    when (oldPoint.dimension) {
-                        2 -> Point2D(
-                            oldPoint.coordinates[0],
-                            oldPoint.coordinates[1],
-                            bestCluster
-                        )
-                        else -> NDPoint(
-                            oldPoint.coordinates.copyOf(),
-                            bestCluster
-                        )
-                    }
-                } else {
-                    oldPoint.copy()
-                }
-            }
-
-            return Pair(result, changed)
-        }
-
-        suspend fun assignPointsParallel(
-            points: List<Point>,
-            centroids: List<Centroid>
-        ): Pair<List<Point>, Boolean> = coroutineScope {
-
-            val cpuCount = Runtime.getRuntime().availableProcessors()
-            val chunkSize = (points.size + cpuCount - 1) / cpuCount
-            val chunks = points.chunked(chunkSize)
-
-            var changed = false
-
-            val deferred = chunks.map { chunk ->
-                async(Dispatchers.Default) {
-                    chunk.map { oldPoint ->
-                        var minDist = Double.MAX_VALUE
-                        var bestCluster = oldPoint.clusterId
-
-                        for (centroid in centroids) {
-                            val d = euclideanDistanceSquared(
-                                oldPoint.coordinates,
-                                centroid.coordinates
-                            )
-                            if (d < minDist) {
-                                minDist = d
-                                bestCluster = centroid.clusterId
-                            }
-                        }
-
-                        if (bestCluster != oldPoint.clusterId) {
-                            changed = true
-                            when (oldPoint.dimension) {
-                                2 -> Point2D(
-                                    oldPoint.coordinates[0],
-                                    oldPoint.coordinates[1],
-                                    bestCluster
-                                )
-                                else -> NDPoint(
-                                    oldPoint.coordinates.copyOf(),
-                                    bestCluster
-                                )
-                            }
-                        } else {
-                            oldPoint.copy()
-                        }
-                    }
-                }
-            }
-
-            Pair(deferred.awaitAll().flatten(), changed)
-        }
-
-        fun updateCentroids(
-            points: List<Point>,
-            targetClusters: Int,
-            dimension: Int
-        ): List<Centroid> {
-
-            val grouped = points.groupBy { it.clusterId }
-            val centroids = mutableListOf<Centroid>()
-
-            for (k in 0 until targetClusters) {
-                val clusterPoints = grouped[k]
-
-                if (clusterPoints.isNullOrEmpty()) {
-                    centroids.add(Centroid(DoubleArray(dimension), k))
-                    continue
-                }
-
-                val center = DoubleArray(dimension)
-
-                for (p in clusterPoints) {
-                    for (i in 0 until dimension) {
-                        center[i] += p.coordinates[i]
-                    }
-                }
-
-                for (i in 0 until dimension) {
-                    center[i] /= clusterPoints.size
-                }
-
-                centroids.add(Centroid(center, k))
-            }
-
-            return centroids
-        }
-
-        fun hasConverged(
+        private fun hasConverged(
             oldCentroids: List<Centroid>,
             newCentroids: List<Centroid>,
             tolerance: Double = 1e-4
         ): Boolean {
-
             for (i in oldCentroids.indices) {
-                val dist = euclideanDistanceSquared(
-                    oldCentroids[i].coordinates,
-                    newCentroids[i].coordinates
-                )
-                if (dist > tolerance) return false
+                if (euclideanDistanceSquared(oldCentroids[i].coordinates, newCentroids[i].coordinates) > tolerance)
+                    return false
             }
             return true
         }
