@@ -14,7 +14,7 @@ import kotlin.system.measureTimeMillis
 class Platform {
     companion object {
         lateinit var delimiter: String
-        private val CLUSTER_NAMES_SET = setOf("cluster", "label", "id", "class")
+        private val CLUSTER_NAMES_SET = setOf("cluster", "label", "id", "class", "cluster_id")
         private val dispatcher = Dispatchers.Default
         private var debugEnabled = true
         private val logFile = File("parallel_debug.log")
@@ -66,6 +66,24 @@ class Platform {
             }
         }
 
+        fun saveFileDialog(defaultFileName: String): String? {
+            val dialog = FileDialog(null as Frame?, "Создать файл результатов", FileDialog.SAVE)
+
+            dialog.file = defaultFileName
+            dialog.setFilenameFilter { _, name -> name.endsWith(".csv") }
+            dialog.isVisible = true
+            val directory = dialog.directory
+            val fileName = dialog.file
+            if (directory == null || fileName == null) return null
+
+            val file = if (!fileName.lowercase().endsWith(".csv")) {
+                File(directory, "$fileName.csv")
+            } else {
+                File(directory, fileName)
+            }
+            return file.absolutePath
+        }
+
         fun normalizePoints(points: List<Point>): List<Point> = runBlocking {
             if (points.isEmpty()) return@runBlocking emptyList()
 
@@ -84,7 +102,7 @@ class Platform {
                     val maxs = DoubleArray(dimension) { Double.NEGATIVE_INFINITY }
 
                     val segmentCount = minOf(points.size, availableProcessors)
-                    val segmentSize = (points.size + segmentCount - 1) / segmentCount // ceil division
+                    val segmentSize = (points.size + segmentCount - 1) / segmentCount
 
                     logDebug("Segments: $segmentCount")
                     logDebug("Segment size: $segmentSize")
