@@ -1,140 +1,140 @@
 === PARALLEL DATA LOADING ===
-Start: 2026-01-08T22:59:36.5673284
+Start: 2026-01-15T23:32:39.6028714
 
-[22:59:41.195] === FILE LOADING START ===
-[22:59:41.197] File: nd_clustering_test_1mil_1767899165.csv
-[22:59:41.199] Size: 38452 KB
-[22:59:41.200] Available processors: 20
-[22:59:41.200] Max memory: 4028 MB
-[22:59:41.200] Free memory: 17 MB
-[22:59:41.526] 
+[23:32:43.110] === FILE LOADING START ===
+[23:32:43.112] File: nd_clustering_test_1767898509.csv
+[23:32:43.114] Size: 3845 KB
+[23:32:43.114] Available processors: 20
+[23:32:43.115] Max memory: 4028 MB
+[23:32:43.115] Free memory: 18 MB
+[23:32:43.189] 
 === CSV PARSING ===
-[22:59:41.527] Total lines in file: 1000001
-[22:59:41.528] Delimiter: ','
-[22:59:41.533] Headers (3): dim1, dim2, cluster
-[22:59:41.534] Cluster index: 2
-[22:59:41.534] Coordinate indices: 0, 1
-[22:59:41.550] Data lines: 1000000
-[22:59:41.551] Available processors: 20
-[22:59:41.551] Chunk size: 50000
-[22:59:41.551] Using parallel parsing
-[22:59:41.572] Created chunks: 20
-[22:59:41.573] Chunk 0 started in thread: DefaultDispatcher-worker-2
-[22:59:41.573] Chunk 1 started in thread: DefaultDispatcher-worker-4
-[22:59:41.573] Chunk 2 started in thread: DefaultDispatcher-worker-7
-[22:59:41.573] Chunk 3 started in thread: DefaultDispatcher-worker-6
-[22:59:41.574] Chunk 4 started in thread: DefaultDispatcher-worker-5
-[22:59:41.574] Chunk 6 started in thread: DefaultDispatcher-worker-9
-[22:59:41.574] Chunk 5 started in thread: DefaultDispatcher-worker-8
-[22:59:41.576] Chunk 7 started in thread: DefaultDispatcher-worker-10
-[22:59:41.576] Chunk 8 started in thread: DefaultDispatcher-worker-11
-[22:59:41.576] Chunk 10 started in thread: DefaultDispatcher-worker-13
-[22:59:41.576] Chunk 9 started in thread: DefaultDispatcher-worker-12
-[22:59:41.576] Chunk 11 started in thread: DefaultDispatcher-worker-14
-[22:59:41.577] Chunk 12 started in thread: DefaultDispatcher-worker-15
-[22:59:41.578] Chunk 14 started in thread: DefaultDispatcher-worker-17
-[22:59:41.577] Chunk 13 started in thread: DefaultDispatcher-worker-16
-[22:59:41.588] Chunk 17 started in thread: DefaultDispatcher-worker-19
-[22:59:41.579] Chunk 16 started in thread: DefaultDispatcher-worker-18
-[22:59:41.578] Chunk 15 started in thread: DefaultDispatcher-worker-3
-[22:59:41.578] Chunk 19 started in thread: DefaultDispatcher-worker-1
-[22:59:41.611] Chunk 18 started in thread: DefaultDispatcher-worker-20
-[22:59:42.060] Chunk 0 completed: 50000 points, 0 errors, time: 478ms
-[22:59:42.064] Chunk 9 completed: 50000 points, 0 errors, time: 488ms
-[22:59:42.066] Chunk 11 completed: 50000 points, 0 errors, time: 488ms
-[22:59:42.076] Chunk 8 completed: 50000 points, 0 errors, time: 499ms
-[22:59:42.077] Chunk 1 completed: 50000 points, 0 errors, time: 504ms
-[22:59:42.082] Chunk 6 completed: 50000 points, 0 errors, time: 506ms
-[22:59:42.083] Chunk 14 completed: 50000 points, 0 errors, time: 471ms
-[22:59:42.084] Chunk 18 completed: 50000 points, 0 errors, time: 472ms
-[22:59:42.088] Chunk 7 completed: 50000 points, 0 errors, time: 512ms
-[22:59:42.088] Chunk 2 completed: 50000 points, 0 errors, time: 515ms
-[22:59:42.092] Chunk 12 completed: 50000 points, 0 errors, time: 515ms
-[22:59:42.093] Chunk 19 completed: 50000 points, 0 errors, time: 482ms
-[22:59:42.093] Chunk 16 completed: 50000 points, 0 errors, time: 482ms
-[22:59:42.097] Chunk 15 completed: 50000 points, 0 errors, time: 486ms
-[22:59:42.102] Chunk 4 completed: 50000 points, 0 errors, time: 528ms
-[22:59:42.105] Chunk 3 completed: 50000 points, 0 errors, time: 531ms
-[22:59:42.106] Chunk 5 completed: 50000 points, 0 errors, time: 530ms
-[22:59:42.107] Chunk 10 completed: 50000 points, 0 errors, time: 531ms
-[22:59:42.107] Chunk 13 completed: 50000 points, 0 errors, time: 496ms
-[22:59:42.110] Chunk 17 completed: 50000 points, 0 errors, time: 499ms
-[22:59:42.117] All chunks completed in 545ms
-[22:59:42.118] Total points loaded: 1000000
-[22:59:42.119] Loaded points: 1000000
-[22:59:42.119] CSV parsing took: 919 ms
-[22:59:42.121] 
+[23:32:43.190] Total lines in file: 100001
+[23:32:43.191] Delimiter: ','
+[23:32:43.193] Headers (3): dim1, dim2, cluster
+[23:32:43.195] Cluster index: 2
+[23:32:43.195] Coordinate indices: 0, 1
+[23:32:43.200] Data lines: 100000
+[23:32:43.200] Available processors: 20
+[23:32:43.201] Chunk size: 5000
+[23:32:43.201] Using parallel parsing
+[23:32:43.212] Created chunks: 20
+[23:32:43.213] Chunk 0 started in thread: DefaultDispatcher-worker-2
+[23:32:43.214] Chunk 1 started in thread: DefaultDispatcher-worker-4
+[23:32:43.215] Chunk 19 started in thread: DefaultDispatcher-worker-1
+[23:32:43.221] Chunk 2 started in thread: DefaultDispatcher-worker-7
+[23:32:43.243] Chunk 5 started in thread: DefaultDispatcher-worker-6
+[23:32:43.243] Chunk 6 started in thread: DefaultDispatcher-worker-18
+[23:32:43.243] Chunk 7 started in thread: DefaultDispatcher-worker-19
+[23:32:43.243] Chunk 4 started in thread: DefaultDispatcher-worker-5
+[23:32:43.221] Chunk 3 started in thread: DefaultDispatcher-worker-8
+[23:32:43.244] Chunk 9 started in thread: DefaultDispatcher-worker-10
+[23:32:43.244] Chunk 8 started in thread: DefaultDispatcher-worker-9
+[23:32:43.245] Chunk 11 started in thread: DefaultDispatcher-worker-3
+[23:32:43.245] Chunk 15 started in thread: DefaultDispatcher-worker-15
+[23:32:43.244] Chunk 10 started in thread: DefaultDispatcher-worker-11
+[23:32:43.245] Chunk 17 started in thread: DefaultDispatcher-worker-20
+[23:32:43.245] Chunk 18 started in thread: DefaultDispatcher-worker-16
+[23:32:43.245] Chunk 12 started in thread: DefaultDispatcher-worker-13
+[23:32:43.245] Chunk 14 started in thread: DefaultDispatcher-worker-14
+[23:32:43.245] Chunk 16 started in thread: DefaultDispatcher-worker-17
+[23:32:43.245] Chunk 13 started in thread: DefaultDispatcher-worker-12
+[23:32:43.387] Chunk 2 completed: 5000 points, 0 errors, time: 164ms
+[23:32:43.387] Chunk 7 completed: 5000 points, 0 errors, time: 121ms
+[23:32:43.388] Chunk 4 completed: 5000 points, 0 errors, time: 124ms
+[23:32:43.389] Chunk 5 completed: 5000 points, 0 errors, time: 145ms
+[23:32:43.392] Chunk 8 completed: 5000 points, 0 errors, time: 132ms
+[23:32:43.421] Chunk 10 completed: 5000 points, 0 errors, time: 152ms
+[23:32:43.437] Chunk 13 completed: 5000 points, 0 errors, time: 162ms
+[23:32:43.438] Chunk 19 completed: 5000 points, 0 errors, time: 222ms
+[23:32:43.462] Chunk 11 completed: 5000 points, 0 errors, time: 195ms
+[23:32:43.462] Chunk 0 completed: 5000 points, 0 errors, time: 248ms
+[23:32:43.471] Chunk 17 completed: 5000 points, 0 errors, time: 197ms
+[23:32:43.473] Chunk 9 completed: 5000 points, 0 errors, time: 214ms
+[23:32:43.473] Chunk 6 completed: 5000 points, 0 errors, time: 217ms
+[23:32:43.474] Chunk 1 completed: 5000 points, 0 errors, time: 259ms
+[23:32:43.474] Chunk 14 completed: 5000 points, 0 errors, time: 200ms
+[23:32:43.474] Chunk 12 completed: 5000 points, 0 errors, time: 200ms
+[23:32:43.475] Chunk 15 completed: 5000 points, 0 errors, time: 207ms
+[23:32:43.477] Chunk 3 completed: 5000 points, 0 errors, time: 203ms
+[23:32:43.480] Chunk 18 completed: 5000 points, 0 errors, time: 206ms
+[23:32:43.480] Chunk 16 completed: 5000 points, 0 errors, time: 206ms
+[23:32:43.482] All chunks completed in 269ms
+[23:32:43.482] Total points loaded: 100000
+[23:32:43.483] Loaded points: 100000
+[23:32:43.491] CSV parsing took: 376 ms
+[23:32:43.493] 
 === NORMALIZATION START ===
-[22:59:42.121] Number of points: 1000000
-[22:59:42.122] Dimension: 2
-[22:59:42.122] Segments: 20
-[22:59:42.123] Segment size: 50000
-[22:59:42.132] Segment 6: processing 50000 points started
-[22:59:42.132] Segment 12: processing 50000 points started
-[22:59:42.132] Segment 0: processing 50000 points started
-[22:59:42.133] Segment 4: processing 50000 points started
-[22:59:42.133] Segment 1: processing 50000 points started
-[22:59:42.132] Segment 15: processing 50000 points started
-[22:59:42.132] Segment 19: processing 50000 points started
-[22:59:42.132] Segment 8: processing 50000 points started
-[22:59:42.132] Segment 14: processing 50000 points started
-[22:59:42.132] Segment 17: processing 50000 points started
-[22:59:42.132] Segment 2: processing 50000 points started
-[22:59:42.132] Segment 18: processing 50000 points started
-[22:59:42.132] Segment 9: processing 50000 points started
-[22:59:42.132] Segment 13: processing 50000 points started
-[22:59:42.133] Segment 11: processing 50000 points started
-[22:59:42.132] Segment 7: processing 50000 points started
-[22:59:42.132] Segment 10: processing 50000 points started
-[22:59:42.133] Segment 5: processing 50000 points started
-[22:59:42.132] Segment 16: processing 50000 points started
-[22:59:42.133] Segment 3: processing 50000 points started
-[22:59:42.179] Segment 5: processing completed
-[22:59:42.180] Segment 19: processing completed
-[22:59:42.194] Segment 16: processing completed
-[22:59:42.194] Segment 15: processing completed
-[22:59:42.254] Segment 12: processing completed
-[22:59:42.254] Segment 4: processing completed
-[22:59:42.274] Segment 17: processing completed
-[22:59:42.275] Segment 9: processing completed
-[22:59:42.282] Segment 6: processing completed
-[22:59:42.282] Segment 10: processing completed
-[22:59:42.283] Segment 3: processing completed
-[22:59:42.283] Segment 0: processing completed
-[22:59:42.283] Segment 8: processing completed
-[22:59:42.284] Segment 11: processing completed
-[22:59:42.284] Segment 2: processing completed
-[22:59:42.284] Segment 18: processing completed
-[22:59:42.286] Segment 13: processing completed
-[22:59:42.287] Segment 1: processing completed
-[22:59:42.295] Segment 14: processing completed
-[22:59:42.295] Segment 7: processing completed
-[22:59:42.296] Min values: 9.918367142036644E-5, -34.27497101655378
-[22:59:42.298] Max values: 99.99969011709342, 133.7976007711881
-[22:59:42.307] Normalization threads: 20
-[22:59:42.309] Normalization thread 19: processing 50000 points
-[22:59:42.310] Normalization thread 0: processing 50000 points
-[22:59:42.309] Normalization thread 5: processing 50000 points
-[22:59:42.309] Normalization thread 11: processing 50000 points
-[22:59:42.309] Normalization thread 10: processing 50000 points
-[22:59:42.309] Normalization thread 9: processing 50000 points
-[22:59:42.309] Normalization thread 4: processing 50000 points
-[22:59:42.309] Normalization thread 1: processing 50000 points
-[22:59:42.310] Normalization thread 8: processing 50000 points
-[22:59:42.309] Normalization thread 3: processing 50000 points
-[22:59:42.310] Normalization thread 16: processing 50000 points
-[22:59:42.309] Normalization thread 14: processing 50000 points
-[22:59:42.309] Normalization thread 17: processing 50000 points
-[22:59:42.309] Normalization thread 2: processing 50000 points
-[22:59:42.310] Normalization thread 15: processing 50000 points
-[22:59:42.310] Normalization thread 13: processing 50000 points
-[22:59:42.310] Normalization thread 6: processing 50000 points
-[22:59:42.310] Normalization thread 12: processing 50000 points
-[22:59:42.310] Normalization thread 7: processing 50000 points
-[22:59:42.315] Normalization thread 18: processing 50000 points
-[22:59:42.530] Min/Max calculation time: 174 ms
-[22:59:42.531] Normalization time: 0 ms
-[22:59:42.531] Total time: 174 ms
-[22:59:42.532] Normalization took: 412 ms
-[22:59:42.532] === LOADING COMPLETED ===
+[23:32:43.494] Number of points: 100000
+[23:32:43.495] Dimension: 2
+[23:32:43.497] Segments: 20
+[23:32:43.497] Segment size: 5000
+[23:32:43.503] Segment 5: processing 5000 points started
+[23:32:43.504] Segment 11: processing 5000 points started
+[23:32:43.503] Segment 7: processing 5000 points started
+[23:32:43.504] Segment 9: processing 5000 points started
+[23:32:43.503] Segment 1: processing 5000 points started
+[23:32:43.504] Segment 0: processing 5000 points started
+[23:32:43.504] Segment 19: processing 5000 points started
+[23:32:43.504] Segment 14: processing 5000 points started
+[23:32:43.504] Segment 2: processing 5000 points started
+[23:32:43.505] Segment 18: processing 5000 points started
+[23:32:43.504] Segment 16: processing 5000 points started
+[23:32:43.504] Segment 13: processing 5000 points started
+[23:32:43.504] Segment 3: processing 5000 points started
+[23:32:43.504] Segment 17: processing 5000 points started
+[23:32:43.503] Segment 6: processing 5000 points started
+[23:32:43.503] Segment 8: processing 5000 points started
+[23:32:43.504] Segment 15: processing 5000 points started
+[23:32:43.506] Segment 4: processing 5000 points started
+[23:32:43.504] Segment 10: processing 5000 points started
+[23:32:43.504] Segment 12: processing 5000 points started
+[23:32:43.505] Segment 7: processing completed
+[23:32:43.507] Segment 11: processing completed
+[23:32:43.508] Segment 5: processing completed
+[23:32:43.510] Segment 9: processing completed
+[23:32:43.511] Segment 19: processing completed
+[23:32:43.511] Segment 0: processing completed
+[23:32:43.510] Segment 1: processing completed
+[23:32:43.511] Segment 14: processing completed
+[23:32:43.511] Segment 6: processing completed
+[23:32:43.511] Segment 8: processing completed
+[23:32:43.517] Segment 17: processing completed
+[23:32:43.517] Segment 3: processing completed
+[23:32:43.517] Segment 4: processing completed
+[23:32:43.518] Segment 15: processing completed
+[23:32:43.519] Segment 18: processing completed
+[23:32:43.520] Segment 13: processing completed
+[23:32:43.520] Segment 10: processing completed
+[23:32:43.520] Segment 12: processing completed
+[23:32:43.520] Segment 2: processing completed
+[23:32:43.520] Segment 16: processing completed
+[23:32:43.522] Min values: 4.949515391872161E-4, -24.55884303549719
+[23:32:43.522] Max values: 99.99703054027734, 118.05199272936424
+[23:32:43.527] Normalization threads: 20
+[23:32:43.529] Normalization thread 2: processing 5000 points
+[23:32:43.529] Normalization thread 9: processing 5000 points
+[23:32:43.529] Normalization thread 19: processing 5000 points
+[23:32:43.529] Normalization thread 12: processing 5000 points
+[23:32:43.529] Normalization thread 5: processing 5000 points
+[23:32:43.529] Normalization thread 15: processing 5000 points
+[23:32:43.529] Normalization thread 0: processing 5000 points
+[23:32:43.529] Normalization thread 1: processing 5000 points
+[23:32:43.529] Normalization thread 6: processing 5000 points
+[23:32:43.529] Normalization thread 4: processing 5000 points
+[23:32:43.529] Normalization thread 3: processing 5000 points
+[23:32:43.529] Normalization thread 10: processing 5000 points
+[23:32:43.529] Normalization thread 7: processing 5000 points
+[23:32:43.529] Normalization thread 8: processing 5000 points
+[23:32:43.529] Normalization thread 11: processing 5000 points
+[23:32:43.529] Normalization thread 13: processing 5000 points
+[23:32:43.529] Normalization thread 16: processing 5000 points
+[23:32:43.530] Normalization thread 18: processing 5000 points
+[23:32:43.530] Normalization thread 17: processing 5000 points
+[23:32:43.529] Normalization thread 14: processing 5000 points
+[23:32:43.555] Min/Max calculation time: 26 ms
+[23:32:43.556] Normalization time: 0 ms
+[23:32:43.556] Total time: 26 ms
+[23:32:43.558] Normalization took: 66 ms
+[23:32:43.558] === LOADING COMPLETED ===
 

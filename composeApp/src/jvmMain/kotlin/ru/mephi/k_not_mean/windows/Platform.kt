@@ -15,15 +15,11 @@ class Platform {
     companion object {
         lateinit var delimiter: String
         private val CLUSTER_NAMES_SET = setOf("cluster", "label", "id", "class")
-
         private val dispatcher = Dispatchers.Default
-
-        // Конфигурация отладки
         private var debugEnabled = true
         private val logFile = File("parallel_debug.log")
 
         init {
-            // Очищаем старый лог при запуске
             if (debugEnabled) {
                 logFile.writeText("=== PARALLEL DATA LOADING ===\n")
                 logFile.appendText("Start: ${LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)}\n\n")
@@ -70,11 +66,6 @@ class Platform {
             }
         }
 
-        /**
-         * 📐 Normalizes all point coordinates to range [0, 1]
-         * using Min-Max Scaling.
-         * Parallelizes min/max computation and normalization.
-         */
         fun normalizePoints(points: List<Point>): List<Point> = runBlocking {
             if (points.isEmpty()) return@runBlocking emptyList()
 
@@ -85,7 +76,6 @@ class Platform {
             val dimension = points.first().dimension
             val availableProcessors = Runtime.getRuntime().availableProcessors()
 
-            // Parallel min/max calculation
             var minCoords: DoubleArray
             var maxCoords: DoubleArray
             val minMaxTime = measureTimeMillis {
@@ -136,7 +126,6 @@ class Platform {
             logDebug("Min values: ${minCoords.joinToString(", ", limit = 5)}")
             logDebug("Max values: ${maxCoords.joinToString(", ", limit = 5)}")
 
-            // Parallel point normalization
             val normalizedPoints = withContext(dispatcher) {
                 val segmentCount = minOf(points.size, availableProcessors)
                 val segmentSize = (points.size + segmentCount - 1) / segmentCount // ceil division
@@ -167,13 +156,7 @@ class Platform {
                 }.awaitAll().flatten()
             }
 
-            val normalizationTime = measureTimeMillis {
-                // Normalization already done above, this just measures the awaitAll time
-            }
-
             logDebug("Min/Max calculation time: ${minMaxTime} ms")
-            logDebug("Normalization time: ${normalizationTime} ms")
-            logDebug("Total time: ${minMaxTime + normalizationTime} ms")
 
             return@runBlocking normalizedPoints
         }
@@ -198,7 +181,6 @@ class Platform {
             val coordinateIndices = headers.indices.filter { it != clusterIndex }
             logDebug("Coordinate indices: ${coordinateIndices.joinToString(", ")}")
 
-            // Split lines for parallel processing
             val dataLines = lines.drop(1)
             logDebug("Data lines: ${dataLines.size}")
 

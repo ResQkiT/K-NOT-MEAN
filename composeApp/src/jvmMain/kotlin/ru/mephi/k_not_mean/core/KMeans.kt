@@ -6,7 +6,6 @@ import kotlin.system.measureTimeMillis
 class KMeans {
 
     companion object {
-
         fun clusterWithAutoK(
             points: List<Point>,
             maxK: Int,
@@ -20,8 +19,6 @@ class KMeans {
             var previousCost = Double.MAX_VALUE
             var growthCounter = 0
 
-            // Оптимизация: работаем с одним и тем же набором данных,
-            // меняя только id кластера внутри
             val workingPoints = points.map { it.copy() }
 
             for (k in 1..maxK) {
@@ -36,7 +33,6 @@ class KMeans {
                 val currentCost = result.totalCost
 
                 if (bestResult == null || currentCost < bestResult.totalCost) {
-                    // Копируем результат для сохранения лучшего состояния
                     bestResult = result.copy(points = result.points.map { it.copy() })
                 }
 
@@ -66,7 +62,6 @@ class KMeans {
 
             val dimension = points.first().dimension
 
-            // Инициализация центроидов (используем For-цикл вместо map для Desktop/JVM скорости)
             var centroids = Array(targetClusters) { i ->
                 Centroid(points[i].coordinates.copyOf(), i)
             }
@@ -79,7 +74,6 @@ class KMeans {
                     }
 
                     val newCentroids = updateCentroidsOptimized(points, targetClusters, dimension)
-
                     if (!changed && hasConverged(centroids.toList(), newCentroids)) return@repeat
                     centroids = newCentroids.toTypedArray()
                 }
@@ -88,8 +82,6 @@ class KMeans {
             val totalCost = CostCalculator.calculateTotalCost(points, centroids.toList(), costModel)
             return ClusteringResult(points, centroids.toList(), elapsedTime, totalCost)
         }
-
-        /* ================= ОПТИМИЗИРОВАННЫЕ МЕТОДЫ ================= */
 
         /**
          * Изменяем clusterId прямо в существующих объектах Point.
@@ -159,7 +151,6 @@ class KMeans {
             val sums = Array(targetClusters) { DoubleArray(dimension) }
             val counts = IntArray(targetClusters)
 
-            // Проход один раз по всем точкам (O(N))
             for (p in points) {
                 val cId = p.clusterId
                 if (cId == -1) continue

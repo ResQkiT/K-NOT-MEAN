@@ -24,7 +24,7 @@ abstract class Point(
         var sum = 0.0
         for (i in coordinates.indices) {
             val diff = coordinates[i] - other.coordinates[i]
-            sum += diff * diff // или diff.pow(2)
+            sum += diff * diff
         }
         return sqrt(sum)
     }
@@ -38,7 +38,6 @@ abstract class Point(
         val newCoords = DoubleArray(dimension) { i ->
             this.coordinates[i] + other.coordinates[i]
         }
-        // Возвращаем универсальную реализацию точки
         return NDPoint(newCoords)
     }
 

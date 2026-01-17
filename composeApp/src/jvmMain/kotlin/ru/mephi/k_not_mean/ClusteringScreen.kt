@@ -13,38 +13,28 @@ import kotlinx.coroutines.withContext
 import ru.mephi.k_not_mean.core.*
 import ru.mephi.k_not_mean.windows.Platform
 
-// Импорты UI (Compose Runtime и Layout)
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.*
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.dp
 
-// Импорты ГРАФИКИ (Важно для генерации ImageBitmap)
-// Обратите внимание: мы НЕ импортируем "java.awt.*"
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Canvas     // Интерфейс Канваса
+import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
-import androidx.compose.ui.graphics.ImageBitmap // Аналог BufferedImage
-import androidx.compose.ui.graphics.Paint       // Кисть для рисования
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.PaintingStyle
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.sp
-
-// Импорты для многопоточности
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.launch
 
-// Ваши модели
 import ru.mephi.k_not_mean.core.Point
 import ru.mephi.k_not_mean.core.Centroid
 
@@ -52,20 +42,14 @@ import ru.mephi.k_not_mean.core.Centroid
 fun ClusteringScreen() {
 
     val scope = rememberCoroutineScope()
-
     var executionMode by remember { mutableStateOf(ExecutionMode.SEQUENTIAL) }
-
     var maxKText by remember { mutableStateOf("10") }
     var buildCostText by remember { mutableStateOf("1000") }
     var transportCostText by remember { mutableStateOf("1.0") }
-
     val points = remember { mutableStateListOf<Point>() }
     var centroids by remember { mutableStateOf<List<Centroid>>(emptyList()) }
-
     var status by remember { mutableStateOf("Готово") }
     var isBusy by remember { mutableStateOf(false) }
-
-    /* ================= ЗАГРУЗКА ФАЙЛА ================= */
 
     fun loadFile() {
         isBusy = true
@@ -88,8 +72,6 @@ fun ClusteringScreen() {
             isBusy = false
         }
     }
-
-    /* ================= КЛАСТЕРИЗАЦИЯ ================= */
 
     fun runClustering() {
 
@@ -140,8 +122,6 @@ fun ClusteringScreen() {
             }
         }
     }
-
-    /* ================= UI ================= */
 
     Column(
         modifier = Modifier.fillMaxSize().padding(12.dp)
@@ -232,8 +212,6 @@ fun ClusteringScreen() {
     }
 }
 
-/* ================= CANVAS ================= */
-
 @OptIn(ExperimentalComposeUiApi::class, ExperimentalComposeUiApi::class)
 @Composable
 fun PointsCanvas(
@@ -249,43 +227,29 @@ fun PointsCanvas(
         val widthPx = with(density) { maxWidth.toPx() }.toInt().coerceAtLeast(1)
         val heightPx = with(density) { maxHeight.toPx() }.toInt().coerceAtLeast(1)
 
-        // === СОСТОЯНИЕ ТРАНСФОРМАЦИИ ===
         var zoom by remember { mutableStateOf(1f) }
         var pan by remember { mutableStateOf(Offset.Zero) }
-
-        // Состояние картинки
         var bitmapState by remember { mutableStateOf<ImageBitmap?>(null) }
         var isGenerating by remember { mutableStateOf(false) }
 
-        // Сброс при загрузке новых данных (опционально, можно убрать, если хотите сохранять позицию)
         LaunchedEffect(points) {
             zoom = 1f
             pan = Offset.Zero
         }
 
-        // === ОБРАБОТЧИКИ МЫШИ (Desktop) ===
         val inputModifier = Modifier
             .pointerInput(Unit) {
-                // Обработка перетаскивания (Pan)
+
                 detectDragGestures { change, dragAmount ->
                     change.consume()
                     pan += dragAmount
                 }
             }
             .onPointerEvent(PointerEventType.Scroll) {
-                // Обработка колесика (Zoom)
                 val change = it.changes.firstOrNull() ?: return@onPointerEvent
                 val scrollDelta = change.scrollDelta.y
-
-                // Коэффициент зума (0.9 отдалить, 1.1 приблизить)
                 val zoomFactor = if (scrollDelta > 0) 0.9f else 1.1f
-
-                // Ограничиваем зум, чтобы не уйти в отрицательные значения
                 val newZoom = (zoom * zoomFactor).coerceIn(0.1f, 500f)
-
-                // *Продвинутая логика (Zoom to cursor)*
-                // Чтобы зумить к курсору, нужно сместить Pan.
-                // Формула: pan = pan + (cursor - pan) * (1 - factor)
                 val cursorPosition = change.position
                 val newPan = pan + (cursorPosition - pan) * (1 - zoomFactor)
 
@@ -293,7 +257,7 @@ fun PointsCanvas(
                 pan = newPan
             }
 
-        // === ГЕНЕРАЦИЯ КАРТИНКИ ===
+
         LaunchedEffect(points, centroids, widthPx, heightPx, zoom, pan) {
             isGenerating = true
             val generatedBitmap = withContext(Dispatchers.Default) {
@@ -310,19 +274,17 @@ fun PointsCanvas(
             isGenerating = false
         }
 
-        // === ОТРИСОВКА ===
         Box(modifier = Modifier.fillMaxSize().then(inputModifier)) {
             bitmapState?.let { bmp ->
                 Image(
                     bitmap = bmp,
                     contentDescription = "Visualization",
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.None, // Важно: None, мы сами управляем координатами
-                    filterQuality = FilterQuality.None // Для четкости пикселей
+                    contentScale = ContentScale.None,
+                    filterQuality = FilterQuality.None
                 )
             }
 
-            // Инфо-панелька
             Column(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -338,7 +300,6 @@ fun PointsCanvas(
                 }
             }
 
-            // Кнопка сброса вида
             Button(
                 onClick = {
                     zoom = 1f
@@ -352,8 +313,6 @@ fun PointsCanvas(
         }
     }
 }
-
-/* ================= ГЕНЕРАЦИЯ (ФОНОВЫЙ ПОТОК) ================= */
 
 fun generateClusterImage(
     points: List<Point>,
@@ -388,15 +347,9 @@ fun generateClusterImage(
         Color.Magenta, Color.Cyan, Color(0xFFFFA500) // Orange
     )
 
-    // Исходные отступы данных (не зависят от зума)
     val basePadding = 24f
     val dataDrawWidth = width - 2 * basePadding
     val dataDrawHeight = height - 2 * basePadding
-
-    // == ГЛАВНАЯ МАГИЯ КООРДИНАТ ==
-    // 1. Нормализуем данные (0..1) -> (padding..width-padding)
-    // 2. Умножаем на Zoom
-    // 3. Добавляем Pan (смещение)
 
     fun mapX(x: Double): Float {
         val screenX = basePadding + x * dataDrawWidth
@@ -408,14 +361,10 @@ fun generateClusterImage(
         return (screenY * zoom + pan.y).toFloat()
     }
 
-    // Простейшая проверка видимости (Culling), чтобы не рисовать то, что за экраном
-    // Это ускоряет отрисовку при сильном приближении
     fun isVisible(x: Float, y: Float): Boolean {
         return x >= -10 && y >= -10 && x <= width + 10 && y <= height + 10
     }
 
-    // Рисуем точки
-    // Радиус точки НЕ умножаем на Zoom -> точки остаются маленькими, расстояние растет
     val pointRadius = 4f
 
     for (i in points.indices) {
@@ -431,7 +380,6 @@ fun generateClusterImage(
         }
     }
 
-    // Рисуем центроиды
     val centroidRadius = 8f
     for (i in centroids.indices) {
         val c = centroids[i]
@@ -439,7 +387,6 @@ fun generateClusterImage(
         val cy = mapY(c.coordinates[1])
 
         if (isVisible(cx, cy)) {
-            // Рисуем черную точку с белой обводкой для контраста
             canvas.drawCircle(Offset(cx, cy), centroidRadius, centroidPaint)
             canvas.drawCircle(Offset(cx, cy), centroidRadius, borderPaint)
         }
