@@ -56,7 +56,7 @@ fun ClusteringScreen() {
             var centroids by remember { mutableStateOf<List<Centroid>>(emptyList()) }
             var status by remember { mutableStateOf("Ожидание файла") }
             var isBusy by remember { mutableStateOf(false) }
-
+            var totalCostValue by remember { mutableStateOf<Double?>(null) }
 
             fun loadFile() {
                 isBusy = true
@@ -70,7 +70,7 @@ fun ClusteringScreen() {
                             restoreCentroidsFromPoints(loaded)
                         }
                         centroids = restoredCentroids
-
+                        totalCostValue = null
                         status = "Файл загружен (${restoredCentroids.size} кластеров)"
                     } else {
                         status = "Загрузка отменена"
@@ -93,6 +93,7 @@ fun ClusteringScreen() {
                         points.clear()
                         points.addAll(result.points)
                         centroids = result.centroids
+                        totalCostValue = result.totalCost
                         status = "Готово за ${result.timeMs}мс"
                         isBusy = false
                     }
@@ -122,7 +123,7 @@ fun ClusteringScreen() {
                     Column(modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
                         Text("Управление", style = MaterialTheme.typography.headlineSmall)
                         Spacer(Modifier.height(16.dp))
-                        StatisticsBlock(points.size, centroids.size)
+                        StatisticsBlock(points.size, centroids.size, totalCostValue)
                         HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
                         Text("Режим вычислений", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.height(8.dp))
@@ -151,7 +152,6 @@ fun ClusteringScreen() {
 
                         Spacer(Modifier.height(16.dp))
 
-                        // Настройки параметров
                         Text("Параметры", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.height(8.dp))
                         StyledTextField("Max K", maxKText, Icons.Default.FormatListNumbered) { if (it.all(Char::isDigit)) maxKText = it }
@@ -162,7 +162,6 @@ fun ClusteringScreen() {
 
                         Spacer(Modifier.height(24.dp))
 
-                        // КНОПКИ ДЕЙСТВИЙ
                         Button(
                             onClick = { runClustering() },
                             modifier = Modifier.fillMaxWidth(),
@@ -201,12 +200,10 @@ fun ClusteringScreen() {
 
                         Spacer(Modifier.height(16.dp))
 
-                        // Статус-бар
                         StatusInfo(status, isBusy)
                     }
                 }
 
-                // КАНВАС
                 Box(
                     modifier = Modifier.weight(1f).fillMaxHeight().padding(16.dp)
                         .clip(RoundedCornerShape(16.dp))
@@ -266,7 +263,7 @@ fun StatusInfo(status: String, isBusy: Boolean) {
 }
 
 @Composable
-fun StatisticsBlock(pointCount: Int, clusterCount: Int) {
+fun StatisticsBlock(pointCount: Int, clusterCount: Int, totalCost: Double?) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -275,10 +272,19 @@ fun StatisticsBlock(pointCount: Int, clusterCount: Int) {
     ) {
         Text("Статистика данных", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
         Spacer(Modifier.height(8.dp))
+
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             StatItem("Точек", pointCount.toString(), Icons.Default.Grain)
             StatItem("Кластеров", if (clusterCount > 0) clusterCount.toString() else "—", Icons.Default.Hub)
         }
+
+        Spacer(Modifier.height(8.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
+        Spacer(Modifier.height(8.dp))
+
+        val costText = totalCost?.let { "%.2f".format(it) } ?: "—"
+
+        StatItem("Мин. стоимость (Func)", costText, Icons.Default.AttachMoney)
     }
 }
 
@@ -419,21 +425,23 @@ fun generateClusterImage(
     val imageBitmap = ImageBitmap(width, height)
     val canvas = Canvas(imageBitmap)
 
-    val colors = listOf(
-        Color(0xFF00FFCC), Color(0xFFFF3366), Color(0xFF3399FF),
-        Color(0xFFCCFF00), Color(0xFFFF9900), Color(0xFF9933FF),
-        Color(0xFF00FF00), Color(0xFFFF00FF)
-    )
+    // Кэш цветов (ваш код)
+    val colorCache = mutableMapOf<Int, Color>()
+    fun getColorForCluster(id: Int): Color {
+        if (id < 0) return Color.Gray
+        return colorCache.getOrPut(id) { generateBeautifulColor(id) }
+    }
 
     val pointPaint = Paint().apply { isAntiAlias = false }
+
     val centroidPaint = Paint().apply {
         color = Color.White
         isAntiAlias = true
     }
-    val borderPaint = Paint().apply {
-        color = Color.Black
+    val centroidBorderPaint = Paint().apply {
         style = PaintingStyle.Stroke
-        strokeWidth = 1.5f
+        strokeWidth = 2f
+        isAntiAlias = true
     }
 
     val basePadding = 40f
@@ -443,28 +451,62 @@ fun generateClusterImage(
     fun mapX(x: Double) = (basePadding + x * dataDrawWidth) * zoom + pan.x
     fun mapY(y: Double) = (basePadding + y * dataDrawHeight) * zoom + pan.y
 
-    points.forEach { p ->
-        if (p.dimension >= 2) {
+    val groupedPoints = points.groupBy { it.clusterId }
+
+    groupedPoints.forEach { (clusterId, clusterPoints) ->
+
+        pointPaint.color = getColorForCluster(clusterId)
+        val pointsToDraw = mutableListOf<Offset>()
+
+        clusterPoints.forEach { p ->
             val px = mapX(p.coordinates[0]).toFloat()
             val py = mapY(p.coordinates[1]).toFloat()
-            if (px in -10f..(width + 10f) && py in -10f..(height + 10f)) {
-                pointPaint.color = if (p.clusterId >= 0) colors[p.clusterId % colors.size] else Color.Gray
-                canvas.drawCircle(Offset(px, py), 3f * zoom.coerceIn(0.5f, 2f), pointPaint)
+            if (px >= -10f && px <= width + 10f && py >= -10f && py <= height + 10f) {
+                pointsToDraw.add(Offset(px, py))
             }
+        }
+
+        if (pointsToDraw.isNotEmpty()) {
+            pointPaint.strokeWidth = 3f * zoom.coerceIn(0.5f, 2f) * 2
+            pointPaint.strokeCap = StrokeCap.Round
+
+            canvas.drawPoints(
+                pointMode = PointMode.Points,
+                points = pointsToDraw,
+                paint = pointPaint
+            )
         }
     }
 
     centroids.forEach { c ->
         val cx = mapX(c.coordinates[0]).toFloat()
         val cy = mapY(c.coordinates[1]).toFloat()
+
         if (cx in -20f..(width + 20f) && cy in -20f..(height + 20f)) {
             val r = 7f * zoom.coerceIn(0.8f, 1.5f)
             canvas.drawCircle(Offset(cx, cy), r, centroidPaint)
-            canvas.drawCircle(Offset(cx, cy), r, borderPaint)
+            centroidBorderPaint.color = getColorForCluster(c.clusterId)
+            canvas.drawCircle(Offset(cx, cy), r, centroidBorderPaint)
         }
     }
 
     return imageBitmap
+}
+fun generateBeautifulColor(id: Int): Color {
+    // Золотое сечение (сопряженное)
+    val goldenRatioConjugate = 0.618033988749895
+
+    // Сдвигаем оттенок на основе ID.
+    // Умножение на золотое сечение гарантирует, что цвета "прыгают" по спектру
+    // и не сливаются даже для соседних ID (например, 1 и 2 будут совершенно разными).
+    val hue = (id * goldenRatioConjugate * 360) % 360
+
+    // Немного варьируем насыщенность и яркость, чтобы добавить глубины
+    // Для темной темы (Dark Theme) лучше использовать высокую яркость (Value)
+    val saturation = 0.7f + (id % 4) * 0.05f // 0.70 .. 0.85
+    val value = 0.85f + (id % 3) * 0.05f      // 0.85 .. 0.95
+
+    return Color.hsv(hue.toFloat(), saturation, value)
 }
 
 fun restoreCentroidsFromPoints(points: List<Point>): List<Centroid> {
