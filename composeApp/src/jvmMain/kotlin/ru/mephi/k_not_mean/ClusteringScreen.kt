@@ -1,359 +1,418 @@
 package ru.mephi.k_not_mean
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import ru.mephi.k_not_mean.core.*
-import ru.mephi.k_not_mean.windows.Platform
-
-// Импорты UI (Compose Runtime и Layout)
+import kotlinx.coroutines.Dispatchers
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.*
 import androidx.compose.ui.ExperimentalComposeUiApi
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.dp
-
-// Импорты ГРАФИКИ (Важно для генерации ImageBitmap)
-// Обратите внимание: мы НЕ импортируем "java.awt.*"
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Canvas     // Интерфейс Канваса
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.FilterQuality
-import androidx.compose.ui.graphics.ImageBitmap // Аналог BufferedImage
-import androidx.compose.ui.graphics.Paint       // Кисть для рисования
-import androidx.compose.ui.graphics.PaintingStyle
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.geometry.Offset
+import ru.mephi.k_not_mean.core.*
+import ru.mephi.k_not_mean.windows.Platform
+import java.io.File
 
-// Импорты для многопоточности
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.launch
-
-// Ваши модели
-import ru.mephi.k_not_mean.core.Point
-import ru.mephi.k_not_mean.core.Centroid
+private val DarkColorScheme = darkColorScheme(
+    primary = Color(0xFFD0BCFF),
+    secondary = Color(0xFFCCC2DC),
+    tertiary = Color(0xFFEFB8C8),
+    surface = Color(0xFF1C1B1F),
+    background = Color(0xFF121212),
+    outline = Color(0xFF938F99)
+)
 
 @Composable
 fun ClusteringScreen() {
+    MaterialTheme(colorScheme = DarkColorScheme) {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            val scope = rememberCoroutineScope()
+            var executionMode by remember { mutableStateOf(ExecutionMode.SEQUENTIAL) }
+            var maxKText by remember { mutableStateOf("10") }
+            var buildCostText by remember { mutableStateOf("1000") }
+            var transportCostText by remember { mutableStateOf("1.0") }
+            val points = remember { mutableStateListOf<Point>() }
+            var centroids by remember { mutableStateOf<List<Centroid>>(emptyList()) }
+            var status by remember { mutableStateOf("Ожидание файла") }
+            var isBusy by remember { mutableStateOf(false) }
+            var totalCostValue by remember { mutableStateOf<Double?>(null) }
 
-    val scope = rememberCoroutineScope()
-
-    var executionMode by remember { mutableStateOf(ExecutionMode.SEQUENTIAL) }
-
-    var maxKText by remember { mutableStateOf("10") }
-    var buildCostText by remember { mutableStateOf("1000") }
-    var transportCostText by remember { mutableStateOf("1.0") }
-
-    val points = remember { mutableStateListOf<Point>() }
-    var centroids by remember { mutableStateOf<List<Centroid>>(emptyList()) }
-
-    var status by remember { mutableStateOf("Готово") }
-    var isBusy by remember { mutableStateOf(false) }
-
-    /* ================= ЗАГРУЗКА ФАЙЛА ================= */
-
-    fun loadFile() {
-        isBusy = true
-        status = "Загрузка файла..."
-
-        scope.launch {
-            val loaded = withContext(Dispatchers.IO) {
-                Platform.openFileDialogAndParse()
+            fun loadFile() {
+                isBusy = true
+                status = "Загрузка..."
+                scope.launch {
+                    val loaded = withContext(Dispatchers.IO) { Platform.openFileDialogAndParse() }
+                    if (loaded != null) {
+                        points.clear()
+                        points.addAll(loaded)
+                        val restoredCentroids = withContext(Dispatchers.Default) {
+                            restoreCentroidsFromPoints(loaded)
+                        }
+                        centroids = restoredCentroids
+                        totalCostValue = null
+                        status = "Файл загружен (${restoredCentroids.size} кластеров)"
+                    } else {
+                        status = "Загрузка отменена"
+                    }
+                    isBusy = false
+                }
             }
 
-            if (loaded != null) {
-                points.clear()
-                points.addAll(loaded)
-                centroids = emptyList()
-                status = "Загружено ${loaded.size} точек"
-            } else {
-                status = "Загрузка отменена"
+            fun runClustering() {
+                val maxK = maxKText.toIntOrNull() ?: 10
+                val costModel = CostModel(buildCostText.toDoubleOrNull() ?: 1000.0, transportCostText.toDoubleOrNull() ?: 1.0)
+
+                if (points.isEmpty()) { status = "Загрузите данные!"; return }
+
+                isBusy = true
+                status = "Вычисление..."
+                scope.launch(Dispatchers.Default) {
+                    val result = KMeans.clusterWithAutoK(points, maxK, costModel, mode = executionMode)
+                    withContext(Dispatchers.Main) {
+                        points.clear()
+                        points.addAll(result.points)
+                        centroids = result.centroids
+                        totalCostValue = result.totalCost
+                        status = "Готово за ${result.timeMs}мс"
+                        isBusy = false
+                    }
+                }
             }
 
-            isBusy = false
-        }
-    }
+            fun saveResults() {
+                scope.launch(Dispatchers.IO) {
+                    val content = points.joinToString("\n") { p ->
+                        "${p.coordinates.joinToString(",")},${p.clusterId}"
+                    }
 
-    /* ================= КЛАСТЕРИЗАЦИЯ ================= */
-
-    fun runClustering() {
-
-        val maxK = maxKText.toIntOrNull()
-        val buildCost = buildCostText.toDoubleOrNull()
-        val transportCost = transportCostText.toDoubleOrNull()
-
-        if (points.isEmpty()) {
-            status = "Нет данных"
-            return
-        }
-
-        if (maxK == null || maxK <= 0) {
-            status = "Некорректный Max K"
-            return
-        }
-
-        if (buildCost == null || transportCost == null) {
-            status = "Некорректные стоимости"
-            return
-        }
-
-        val costModel = CostModel(buildCost, transportCost)
-
-        isBusy = true
-        status = "Поиск оптимального K..."
-
-        scope.launch(Dispatchers.Default) {
-
-            val result = KMeans.clusterWithAutoK(
-                points = points,
-                maxK = maxK,
-                costModel = costModel,
-                mode = executionMode
-            )
-
-            withContext(Dispatchers.Main) {
-                points.clear()
-                points.addAll(result.points)
-                centroids = result.centroids
-
-                status =
-                    "Оптимальный K=${centroids.size} | " +
-                            "Стоимость=${"%.2f".format(result.totalCost)} | " +
-                            "${result.timeMs} мс"
-
-                isBusy = false
+                    val path = Platform.saveFileDialog("clusters.csv")
+                    if (path != null) {
+                        File(path).writeText("x,y,cluster_id\n$content")
+                        withContext(Dispatchers.Main) { status = "Сохранено: $path" }
+                    }
+                }
             }
-        }
-    }
 
-    /* ================= UI ================= */
+            Row(modifier = Modifier.fillMaxSize()) {
+                Card(
+                    modifier = Modifier.width(320.dp).fillMaxHeight().padding(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
+                        Text("Управление", style = MaterialTheme.typography.headlineSmall)
+                        Spacer(Modifier.height(16.dp))
+                        StatisticsBlock(points.size, centroids.size, totalCostValue)
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                        Text("Режим вычислений", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.height(8.dp))
 
-    Column(
-        modifier = Modifier.fillMaxSize().padding(12.dp)
-    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(40.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .padding(4.dp)
+                        ) {
+                            ExecutionModeOption(
+                                label = "SEQ",
+                                isSelected = executionMode == ExecutionMode.SEQUENTIAL,
+                                modifier = Modifier.weight(1f),
+                                onClick = { executionMode = ExecutionMode.SEQUENTIAL }
+                            )
+                            ExecutionModeOption(
+                                label = "PAR",
+                                isSelected = executionMode == ExecutionMode.PARALLEL,
+                                modifier = Modifier.weight(1f),
+                                onClick = { executionMode = ExecutionMode.PARALLEL }
+                            )
+                        }
 
-        Text(
-            "K-Means с автоматическим подбором K",
-            style = MaterialTheme.typography.titleMedium
-        )
+                        Spacer(Modifier.height(16.dp))
 
-        Spacer(Modifier.height(8.dp))
+                        Text("Параметры", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.height(8.dp))
+                        StyledTextField("Max K", maxKText, Icons.Default.FormatListNumbered) { if (it.all(Char::isDigit)) maxKText = it }
+                        Spacer(Modifier.height(8.dp))
+                        StyledTextField("Цена постройки", buildCostText, Icons.Default.AccountBalance) { buildCostText = it }
+                        Spacer(Modifier.height(8.dp))
+                        StyledTextField("Цена перевозки", transportCostText, Icons.Default.LocalShipping) { transportCostText = it }
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Режим:")
-            Spacer(Modifier.width(8.dp))
-            RadioButton(
-                selected = executionMode == ExecutionMode.SEQUENTIAL,
-                onClick = { executionMode = ExecutionMode.SEQUENTIAL }
-            )
-            Text("SEQ")
-            Spacer(Modifier.width(8.dp))
-            RadioButton(
-                selected = executionMode == ExecutionMode.PARALLEL,
-                onClick = { executionMode = ExecutionMode.PARALLEL }
-            )
-            Text("PAR")
-        }
+                        Spacer(Modifier.height(24.dp))
 
-        Spacer(Modifier.height(8.dp))
+                        Button(
+                            onClick = { runClustering() },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !isBusy && points.isNotEmpty(),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(Icons.Default.PlayArrow, null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Рассчитать")
+                        }
 
-        Row {
-            OutlinedTextField(
-                value = maxKText,
-                onValueChange = { if (it.all(Char::isDigit)) maxKText = it },
-                label = { Text("Max K") },
-                modifier = Modifier.width(100.dp),
-                singleLine = true
-            )
+                        Spacer(Modifier.height(8.dp))
 
-            Spacer(Modifier.width(8.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = { loadFile() },
+                                modifier = Modifier.weight(1f),
+                                enabled = !isBusy,
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(Icons.Default.FileUpload, null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Файл")
+                            }
+                            OutlinedButton(
+                                onClick = { saveResults() },
+                                modifier = Modifier.weight(1f),
+                                enabled = !isBusy && centroids.isNotEmpty(),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(Icons.Default.Save, null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Экспорт")
+                            }
+                        }
 
-            OutlinedTextField(
-                value = buildCostText,
-                onValueChange = { buildCostText = it },
-                label = { Text("Цена постройки") },
-                modifier = Modifier.width(160.dp),
-                singleLine = true
-            )
+                        Spacer(Modifier.height(16.dp))
 
-            Spacer(Modifier.width(8.dp))
+                        StatusInfo(status, isBusy)
+                    }
+                }
 
-            OutlinedTextField(
-                value = transportCostText,
-                onValueChange = { transportCostText = it },
-                label = { Text("Цена перевозки") },
-                modifier = Modifier.width(160.dp),
-                singleLine = true
-            )
-        }
-
-        Spacer(Modifier.height(8.dp))
-
-        Row {
-            Button(onClick = ::runClustering, enabled = !isBusy) {
-                Text("Старт")
-            }
-            Spacer(Modifier.width(8.dp))
-            Button(onClick = ::loadFile, enabled = !isBusy) {
-                Text("Файл")
-            }
-        }
-
-        Spacer(Modifier.height(8.dp))
-        Text(status, color = Color.Gray)
-
-        Spacer(Modifier.height(8.dp))
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .border(1.dp, Color.LightGray)
-                .background(Color(0xFFF5F5F5))
-        ) {
-            if (points.isNotEmpty()) {
-                PointsCanvas(points, centroids)
+                Box(
+                    modifier = Modifier.weight(1f).fillMaxHeight().padding(16.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFF0A0A0A))
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+                ) {
+                    if (points.isNotEmpty()) {
+                        PointsCanvas(points, centroids)
+                    } else {
+                        EmptyStatePlaceholder()
+                    }
+                }
             }
         }
     }
 }
 
-/* ================= CANVAS ================= */
-
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalComposeUiApi::class)
 @Composable
-fun PointsCanvas(
-    points: List<Point>,
-    centroids: List<Centroid>
+fun ExecutionModeOption(
+    label: String,
+    isSelected: Boolean,
+    modifier: Modifier,
+    onClick: () -> Unit
 ) {
-    BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFFF5F5F5))
+    val background = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
+    val textColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+
+    Box(
+        modifier = modifier
+            .fillMaxHeight()
+            .clip(RoundedCornerShape(6.dp))
+            .background(background)
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
     ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = textColor
+        )
+    }
+}
+
+@Composable
+fun StatusInfo(status: String, isBusy: Boolean) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.2f),
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(modifier = Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (isBusy) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+            Spacer(Modifier.width(if (isBusy) 8.dp else 0.dp))
+            Text(status, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+fun StatisticsBlock(pointCount: Int, clusterCount: Int, totalCost: Double?) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+            .padding(12.dp)
+    ) {
+        Text("Статистика данных", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+        Spacer(Modifier.height(8.dp))
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            StatItem("Точек", pointCount.toString(), Icons.Default.Grain)
+            StatItem("Кластеров", if (clusterCount > 0) clusterCount.toString() else "—", Icons.Default.Hub)
+        }
+
+        Spacer(Modifier.height(8.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
+        Spacer(Modifier.height(8.dp))
+
+        val costText = totalCost?.let { "%.2f".format(it) } ?: "—"
+
+        StatItem("Мин. стоимость (Func)", costText, Icons.Default.AttachMoney)
+    }
+}
+
+@Composable
+fun StatItem(label: String, value: String, icon: ImageVector) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.width(4.dp))
+        Column {
+            Text(value, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+            Text(label, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+        }
+    }
+}
+
+@Composable
+fun EmptyStatePlaceholder() {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            imageVector = Icons.Default.Analytics,
+            contentDescription = null,
+            modifier = Modifier.size(80.dp),
+            tint = Color.DarkGray
+        )
+        Spacer(Modifier.height(16.dp))
+        Text("Загрузите CSV файл для начала работы", color = Color.Gray)
+    }
+}
+
+@Composable
+fun StyledTextField(label: String, value: String, icon: ImageVector, onValueChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        leadingIcon = { Icon(icon, null, modifier = Modifier.size(18.dp)) },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+        shape = RoundedCornerShape(8.dp),
+        textStyle = MaterialTheme.typography.bodyMedium
+    )
+}
+
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+fun PointsCanvas(points: List<Point>, centroids: List<Centroid>) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val density = LocalDensity.current
         val widthPx = with(density) { maxWidth.toPx() }.toInt().coerceAtLeast(1)
         val heightPx = with(density) { maxHeight.toPx() }.toInt().coerceAtLeast(1)
 
-        // === СОСТОЯНИЕ ТРАНСФОРМАЦИИ ===
         var zoom by remember { mutableStateOf(1f) }
         var pan by remember { mutableStateOf(Offset.Zero) }
-
-        // Состояние картинки
         var bitmapState by remember { mutableStateOf<ImageBitmap?>(null) }
         var isGenerating by remember { mutableStateOf(false) }
 
-        // Сброс при загрузке новых данных (опционально, можно убрать, если хотите сохранять позицию)
-        LaunchedEffect(points) {
-            zoom = 1f
-            pan = Offset.Zero
+        LaunchedEffect(points, centroids, widthPx, heightPx, zoom, pan) {
+            isGenerating = true
+            val generatedBitmap = withContext(Dispatchers.Default) {
+                generateClusterImage(points, centroids, widthPx, heightPx, zoom, pan)
+            }
+            bitmapState = generatedBitmap
+            isGenerating = false
         }
 
-        // === ОБРАБОТЧИКИ МЫШИ (Desktop) ===
         val inputModifier = Modifier
             .pointerInput(Unit) {
-                // Обработка перетаскивания (Pan)
                 detectDragGestures { change, dragAmount ->
                     change.consume()
                     pan += dragAmount
                 }
             }
             .onPointerEvent(PointerEventType.Scroll) {
-                // Обработка колесика (Zoom)
                 val change = it.changes.firstOrNull() ?: return@onPointerEvent
-                val scrollDelta = change.scrollDelta.y
-
-                // Коэффициент зума (0.9 отдалить, 1.1 приблизить)
-                val zoomFactor = if (scrollDelta > 0) 0.9f else 1.1f
-
-                // Ограничиваем зум, чтобы не уйти в отрицательные значения
-                val newZoom = (zoom * zoomFactor).coerceIn(0.1f, 500f)
-
-                // *Продвинутая логика (Zoom to cursor)*
-                // Чтобы зумить к курсору, нужно сместить Pan.
-                // Формула: pan = pan + (cursor - pan) * (1 - factor)
-                val cursorPosition = change.position
-                val newPan = pan + (cursorPosition - pan) * (1 - zoomFactor)
-
-                zoom = newZoom
-                pan = newPan
+                val zoomFactor = if (change.scrollDelta.y > 0) 0.9f else 1.1f
+                zoom = (zoom * zoomFactor).coerceIn(0.1f, 500f)
+                pan += (change.position - pan) * (1 - zoomFactor)
             }
 
-        // === ГЕНЕРАЦИЯ КАРТИНКИ ===
-        LaunchedEffect(points, centroids, widthPx, heightPx, zoom, pan) {
-            isGenerating = true
-            val generatedBitmap = withContext(Dispatchers.Default) {
-                generateClusterImage(
-                    points = points,
-                    centroids = centroids,
-                    width = widthPx,
-                    height = heightPx,
-                    zoom = zoom,
-                    pan = pan
-                )
-            }
-            bitmapState = generatedBitmap
-            isGenerating = false
-        }
-
-        // === ОТРИСОВКА ===
         Box(modifier = Modifier.fillMaxSize().then(inputModifier)) {
             bitmapState?.let { bmp ->
                 Image(
                     bitmap = bmp,
-                    contentDescription = "Visualization",
+                    contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.None, // Важно: None, мы сами управляем координатами
-                    filterQuality = FilterQuality.None // Для четкости пикселей
+                    contentScale = ContentScale.None,
+                    filterQuality = FilterQuality.None
                 )
             }
 
-            // Инфо-панелька
-            Column(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(8.dp)
-            ) {
-                Text(
-                    text = "Zoom: ${"%.2f".format(zoom)}x",
-                    fontSize = 12.sp,
-                    color = Color.Gray
-                )
+
+            Column(modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)) {
+                Surface(
+                    color = Color.Black.copy(alpha = 0.6f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        "Zoom: ${"%.2f".format(zoom)}x",
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        color = Color.White,
+                        fontSize = 12.sp
+                    )
+                }
                 if (isGenerating) {
-                    Text("Rendering...", fontSize = 10.sp, color = Color.Red)
+                    CircularProgressIndicator(
+                        modifier = Modifier.padding(top = 8.dp).size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
 
-            // Кнопка сброса вида
-            Button(
-                onClick = {
-                    zoom = 1f
-                    pan = Offset.Zero
-                },
+            FilledTonalButton(
+                onClick = { zoom = 1f; pan = Offset.Zero },
                 modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.LightGray)
+                contentPadding = PaddingValues(horizontal = 12.dp)
             ) {
-                Text("Reset View", color = Color.Black)
+                Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Сброс вида")
             }
         }
     }
 }
-
-/* ================= ГЕНЕРАЦИЯ (ФОНОВЫЙ ПОТОК) ================= */
 
 fun generateClusterImage(
     points: List<Point>,
@@ -366,84 +425,105 @@ fun generateClusterImage(
     val imageBitmap = ImageBitmap(width, height)
     val canvas = Canvas(imageBitmap)
 
-    val pointPaint = Paint().apply {
-        isAntiAlias = false
-        style = PaintingStyle.Fill
+    // Кэш цветов (ваш код)
+    val colorCache = mutableMapOf<Int, Color>()
+    fun getColorForCluster(id: Int): Color {
+        if (id < 0) return Color.Gray
+        return colorCache.getOrPut(id) { generateBeautifulColor(id) }
     }
+
+    val pointPaint = Paint().apply { isAntiAlias = false }
 
     val centroidPaint = Paint().apply {
-        color = Color.Black
-        isAntiAlias = true
-        style = PaintingStyle.Fill
-    }
-
-    val borderPaint = Paint().apply {
         color = Color.White
+        isAntiAlias = true
+    }
+    val centroidBorderPaint = Paint().apply {
         style = PaintingStyle.Stroke
         strokeWidth = 2f
+        isAntiAlias = true
     }
 
-    val colors = listOf(
-        Color.Red, Color.Blue, Color.Green,
-        Color.Magenta, Color.Cyan, Color(0xFFFFA500) // Orange
-    )
-
-    // Исходные отступы данных (не зависят от зума)
-    val basePadding = 24f
+    val basePadding = 40f
     val dataDrawWidth = width - 2 * basePadding
     val dataDrawHeight = height - 2 * basePadding
 
-    // == ГЛАВНАЯ МАГИЯ КООРДИНАТ ==
-    // 1. Нормализуем данные (0..1) -> (padding..width-padding)
-    // 2. Умножаем на Zoom
-    // 3. Добавляем Pan (смещение)
+    fun mapX(x: Double) = (basePadding + x * dataDrawWidth) * zoom + pan.x
+    fun mapY(y: Double) = (basePadding + y * dataDrawHeight) * zoom + pan.y
 
-    fun mapX(x: Double): Float {
-        val screenX = basePadding + x * dataDrawWidth
-        return (screenX * zoom + pan.x).toFloat()
-    }
+    val groupedPoints = points.groupBy { it.clusterId }
 
-    fun mapY(y: Double): Float {
-        val screenY = basePadding + y * dataDrawHeight
-        return (screenY * zoom + pan.y).toFloat()
-    }
+    groupedPoints.forEach { (clusterId, clusterPoints) ->
 
-    // Простейшая проверка видимости (Culling), чтобы не рисовать то, что за экраном
-    // Это ускоряет отрисовку при сильном приближении
-    fun isVisible(x: Float, y: Float): Boolean {
-        return x >= -10 && y >= -10 && x <= width + 10 && y <= height + 10
-    }
+        pointPaint.color = getColorForCluster(clusterId)
+        val pointsToDraw = mutableListOf<Offset>()
 
-    // Рисуем точки
-    // Радиус точки НЕ умножаем на Zoom -> точки остаются маленькими, расстояние растет
-    val pointRadius = 4f
-
-    for (i in points.indices) {
-        val p = points[i]
-        if (p.dimension >= 2 && p.clusterId >= 0) {
-            val px = mapX(p.coordinates[0])
-            val py = mapY(p.coordinates[1])
-
-            if (isVisible(px, py)) {
-                pointPaint.color = colors[p.clusterId % colors.size]
-                canvas.drawCircle(Offset(px, py), pointRadius, pointPaint)
+        clusterPoints.forEach { p ->
+            val px = mapX(p.coordinates[0]).toFloat()
+            val py = mapY(p.coordinates[1]).toFloat()
+            if (px >= -10f && px <= width + 10f && py >= -10f && py <= height + 10f) {
+                pointsToDraw.add(Offset(px, py))
             }
+        }
+
+        if (pointsToDraw.isNotEmpty()) {
+            pointPaint.strokeWidth = 3f * zoom.coerceIn(0.5f, 2f) * 2
+            pointPaint.strokeCap = StrokeCap.Round
+
+            canvas.drawPoints(
+                pointMode = PointMode.Points,
+                points = pointsToDraw,
+                paint = pointPaint
+            )
         }
     }
 
-    // Рисуем центроиды
-    val centroidRadius = 8f
-    for (i in centroids.indices) {
-        val c = centroids[i]
-        val cx = mapX(c.coordinates[0])
-        val cy = mapY(c.coordinates[1])
+    centroids.forEach { c ->
+        val cx = mapX(c.coordinates[0]).toFloat()
+        val cy = mapY(c.coordinates[1]).toFloat()
 
-        if (isVisible(cx, cy)) {
-            // Рисуем черную точку с белой обводкой для контраста
-            canvas.drawCircle(Offset(cx, cy), centroidRadius, centroidPaint)
-            canvas.drawCircle(Offset(cx, cy), centroidRadius, borderPaint)
+        if (cx in -20f..(width + 20f) && cy in -20f..(height + 20f)) {
+            val r = 7f * zoom.coerceIn(0.8f, 1.5f)
+            canvas.drawCircle(Offset(cx, cy), r, centroidPaint)
+            centroidBorderPaint.color = getColorForCluster(c.clusterId)
+            canvas.drawCircle(Offset(cx, cy), r, centroidBorderPaint)
         }
     }
 
     return imageBitmap
+}
+fun generateBeautifulColor(id: Int): Color {
+    // Золотое сечение (сопряженное)
+    val goldenRatioConjugate = 0.618033988749895
+
+    // Сдвигаем оттенок на основе ID.
+    // Умножение на золотое сечение гарантирует, что цвета "прыгают" по спектру
+    // и не сливаются даже для соседних ID (например, 1 и 2 будут совершенно разными).
+    val hue = (id * goldenRatioConjugate * 360) % 360
+
+    // Немного варьируем насыщенность и яркость, чтобы добавить глубины
+    // Для темной темы (Dark Theme) лучше использовать высокую яркость (Value)
+    val saturation = 0.7f + (id % 4) * 0.05f // 0.70 .. 0.85
+    val value = 0.85f + (id % 3) * 0.05f      // 0.85 .. 0.95
+
+    return Color.hsv(hue.toFloat(), saturation, value)
+}
+
+fun restoreCentroidsFromPoints(points: List<Point>): List<Centroid> {
+    val clusters = points.filter { it.clusterId != -1 }.groupBy { it.clusterId }
+
+    return clusters.map { (id, clusterPoints) ->
+        val dimension = clusterPoints.first().dimension
+        val coords = DoubleArray(dimension)
+        for (point in clusterPoints) {
+            for (i in 0 until dimension) {
+                coords[i] += point.coordinates[i]
+            }
+        }
+
+        for (i in 0 until dimension) {
+            coords[i] /= clusterPoints.size.toDouble()
+        }
+        Centroid(coords, id)
+    }
 }
