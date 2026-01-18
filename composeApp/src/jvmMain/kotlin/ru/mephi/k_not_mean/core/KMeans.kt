@@ -13,44 +13,105 @@ class KMeans {
             maxIterations: Int = 100,
             mode: ExecutionMode = ExecutionMode.SEQUENTIAL
         ): ClusteringResult {
+            System.gc()
             require(maxK > 0)
 
-            var bestResult: ClusteringResult? = null
-            var previousCost = Double.MAX_VALUE
-            var growthCounter = 0
+            val bestClusterIds = IntArray(points.size)
+            var bestCentroids: List<Centroid> = emptyList()
+            var bestTotalCost = Double.MAX_VALUE
+            var bestTimeMs = 0L
 
-            val workingPoints = points.map { it.copy() }
+            val totalSearchTime = measureTimeMillis {
+                var previousCost = Double.MAX_VALUE
+                var growthCounter = 0
 
-            for (k in 1..maxK) {
-                val result = clusterInternal(
-                    points = workingPoints,
-                    targetClusters = k,
-                    costModel = costModel,
-                    maxIterations = maxIterations,
-                    mode = mode
-                )
+                val workingPoints = points.map { it.copy() }
 
-                val currentCost = result.totalCost
+                for (k in 1..maxK) {
+                    val result = clusterInternal(
+                        points = workingPoints,
+                        targetClusters = k,
+                        costModel = costModel,
+                        maxIterations = maxIterations,
+                        mode = mode
+                    )
+                    val currentCost = result.totalCost
 
-                if (bestResult == null || currentCost < bestResult.totalCost) {
-                    bestResult = result.copy(points = result.points.map { it.copy() })
+                    if (currentCost < bestTotalCost) {
+                        bestTotalCost = currentCost
+                        bestCentroids = result.centroids
+                        bestTimeMs = result.timeMs
+
+                        for (i in workingPoints.indices) {
+                            bestClusterIds[i] = workingPoints[i].clusterId
+                        }
+                    }
+
+
+                    if (currentCost > previousCost) {
+                        growthCounter++
+                        if (growthCounter >= 2) break
+                    } else {
+                        growthCounter = 0
+                    }
+                    previousCost = currentCost
                 }
-
-                if (currentCost > previousCost) {
-                    growthCounter++
-                    if (growthCounter >= 2) break
-                } else {
-                    growthCounter = 0
-                }
-                previousCost = currentCost
             }
 
-            return bestResult!!
+            val finalPoints = points.mapIndexed { index, point ->
+                val newPoint = point.copy()
+                newPoint.clusterId = bestClusterIds[index]
+                newPoint
+            }
+
+            return ClusteringResult(
+                points = finalPoints,
+                centroids = bestCentroids,
+                timeMs = totalSearchTime,
+                totalCost = bestTotalCost
+            )
         }
 
-        /**
-         * Внутренний метод для работы с мутабельными точками
-         */
+        private fun initializeCentroidsKMeansPP(points: List<Point>, k: Int): Array<Centroid> {
+            val random = java.util.Random()
+            val centroids = ArrayList<Centroid>()
+            val n = points.size
+            val firstIndex = random.nextInt(n)
+
+            centroids.add(Centroid(points[firstIndex].coordinates.copyOf(), 0))
+
+            val minDistsSq = DoubleArray(n) { Double.MAX_VALUE }
+
+            for (clusterIndex in 1 until k) {
+                val lastCentroid = centroids.last()
+                var sumDistsSq = 0.0
+
+                for (i in 0 until n) {
+                    val distSq = euclideanDistanceSquared(points[i].coordinates, lastCentroid.coordinates)
+                    if (distSq < minDistsSq[i]) {
+                        minDistsSq[i] = distSq
+                    }
+                    sumDistsSq += minDistsSq[i]
+                }
+                var target = random.nextDouble() * sumDistsSq
+                var nextCentroidIndex = 0
+
+                for (i in 0 until n) {
+                    target -= minDistsSq[i]
+                    if (target <= 0) {
+                        nextCentroidIndex = i
+                        break
+                    }
+                }
+
+                if (target > 0) nextCentroidIndex = n - 1
+
+                centroids.add(Centroid(points[nextCentroidIndex].coordinates.copyOf(), clusterIndex))
+            }
+
+            return centroids.toTypedArray()
+        }
+
         private fun clusterInternal(
             points: List<Point>,
             targetClusters: Int,
@@ -62,9 +123,7 @@ class KMeans {
 
             val dimension = points.first().dimension
 
-            var centroids = Array(targetClusters) { i ->
-                Centroid(points[i].coordinates.copyOf(), i)
-            }
+            var centroids = initializeCentroidsKMeansPP(points, targetClusters)
 
             val elapsedTime = measureTimeMillis {
                 repeat(maxIterations) {
@@ -78,15 +137,10 @@ class KMeans {
                     centroids = newCentroids.toTypedArray()
                 }
             }
-
             val totalCost = CostCalculator.calculateTotalCost(points, centroids.toList(), costModel)
             return ClusteringResult(points, centroids.toList(), elapsedTime, totalCost)
         }
 
-        /**
-         * Изменяем clusterId прямо в существующих объектах Point.
-         * Возвращаем true, если хотя бы одна точка сменила кластер.
-         */
         private fun assignPointsSequential(points: List<Point>, centroids: Array<Centroid>): Boolean {
             var anyChanged = false
             for (point in points) {
@@ -140,9 +194,6 @@ class KMeans {
             results.awaitAll().any { it }
         }
 
-        /**
-         * Уход от groupBy. Используем массивы-аккумуляторы.
-         */
         private fun updateCentroidsOptimized(
             points: List<Point>,
             targetClusters: Int,

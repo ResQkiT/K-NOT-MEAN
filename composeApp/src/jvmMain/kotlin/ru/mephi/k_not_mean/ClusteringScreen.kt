@@ -1,5 +1,6 @@
 package ru.mephi.k_not_mean
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -34,7 +35,7 @@ import ru.mephi.k_not_mean.core.*
 import ru.mephi.k_not_mean.windows.Platform
 import java.io.File
 
-private val DarkColorScheme = darkColorScheme(
+private val darkColorScheme = darkColorScheme(
     primary = Color(0xFFD0BCFF),
     secondary = Color(0xFFCCC2DC),
     tertiary = Color(0xFFEFB8C8),
@@ -45,7 +46,7 @@ private val DarkColorScheme = darkColorScheme(
 
 @Composable
 fun ClusteringScreen() {
-    MaterialTheme(colorScheme = DarkColorScheme) {
+    MaterialTheme(colorScheme = darkColorScheme) {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             val scope = rememberCoroutineScope()
             var executionMode by remember { mutableStateOf(ExecutionMode.SEQUENTIAL) }
@@ -345,6 +346,8 @@ fun PointsCanvas(points: List<Point>, centroids: List<Centroid>) {
         var bitmapState by remember { mutableStateOf<ImageBitmap?>(null) }
         var isGenerating by remember { mutableStateOf(false) }
 
+        var mousePos by remember { mutableStateOf<Offset?>(null) }
+
         LaunchedEffect(points, centroids, widthPx, heightPx, zoom, pan) {
             isGenerating = true
             val generatedBitmap = withContext(Dispatchers.Default) {
@@ -367,6 +370,12 @@ fun PointsCanvas(points: List<Point>, centroids: List<Centroid>) {
                 zoom = (zoom * zoomFactor).coerceIn(0.1f, 500f)
                 pan += (change.position - pan) * (1 - zoomFactor)
             }
+            .onPointerEvent(PointerEventType.Move) { event ->
+                mousePos = event.changes.first().position
+            }
+            .onPointerEvent(PointerEventType.Exit) {
+                mousePos = null
+            }
 
         Box(modifier = Modifier.fillMaxSize().then(inputModifier)) {
             bitmapState?.let { bmp ->
@@ -379,6 +388,35 @@ fun PointsCanvas(points: List<Point>, centroids: List<Centroid>) {
                 )
             }
 
+            mousePos?.let { pos ->
+                val basePadding = 40f
+                val dataDrawWidth = widthPx - 2 * basePadding
+                val dataDrawHeight = heightPx - 2 * basePadding
+
+                val dataX = ((pos.x - pan.x) / zoom - basePadding) / dataDrawWidth
+                val dataY = ((pos.y - pan.y) / zoom - basePadding) / dataDrawHeight
+
+                Surface(
+                    modifier = Modifier
+                        .offset {
+                            androidx.compose.ui.unit.IntOffset(
+                                (pos.x + 15).toInt(),
+                                (pos.y + 15).toInt()
+                            )
+                        },
+                    shape = RoundedCornerShape(4.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+                    shadowElevation = 4.dp
+                ) {
+                    Text(
+                        text = "x: %.3f\ny: %.3f".format(dataX, dataY),
+                        modifier = Modifier.padding(6.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
 
             Column(modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)) {
                 Surface(
@@ -425,7 +463,6 @@ fun generateClusterImage(
     val imageBitmap = ImageBitmap(width, height)
     val canvas = Canvas(imageBitmap)
 
-    // Кэш цветов (ваш код)
     val colorCache = mutableMapOf<Int, Color>()
     fun getColorForCluster(id: Int): Color {
         if (id < 0) return Color.Gray
@@ -493,18 +530,10 @@ fun generateClusterImage(
     return imageBitmap
 }
 fun generateBeautifulColor(id: Int): Color {
-    // Золотое сечение (сопряженное)
     val goldenRatioConjugate = 0.618033988749895
-
-    // Сдвигаем оттенок на основе ID.
-    // Умножение на золотое сечение гарантирует, что цвета "прыгают" по спектру
-    // и не сливаются даже для соседних ID (например, 1 и 2 будут совершенно разными).
     val hue = (id * goldenRatioConjugate * 360) % 360
-
-    // Немного варьируем насыщенность и яркость, чтобы добавить глубины
-    // Для темной темы (Dark Theme) лучше использовать высокую яркость (Value)
-    val saturation = 0.7f + (id % 4) * 0.05f // 0.70 .. 0.85
-    val value = 0.85f + (id % 3) * 0.05f      // 0.85 .. 0.95
+    val saturation = 0.7f + (id % 4) * 0.05f
+    val value = 0.85f + (id % 3) * 0.05f
 
     return Color.hsv(hue.toFloat(), saturation, value)
 }

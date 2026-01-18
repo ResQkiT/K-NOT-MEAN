@@ -334,30 +334,7 @@ class Platform {
                 println(logMessage)
                 try {
                     logFile.appendText("$logMessage\n")
-                } catch (e: Exception) {
-                    // Ignore file write errors
-                }
-            }
-        }
-
-        fun enableDebug(enable: Boolean) {
-            debugEnabled = enable
-        }
-
-        fun getDebugLog(): String {
-            return try {
-                logFile.readText()
-            } catch (e: Exception) {
-                "Error reading log file: ${e.message}"
-            }
-        }
-
-        fun clearDebugLog() {
-            try {
-                logFile.writeText("=== PARALLEL DATA LOADING ===\n")
-                logFile.appendText("Start: ${LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)}\n\n")
-            } catch (e: Exception) {
-                println("Error clearing log: ${e.message}")
+                } catch (e: Exception) { }
             }
         }
     }
